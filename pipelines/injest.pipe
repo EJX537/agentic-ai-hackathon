@@ -1,0 +1,39 @@
+{
+    "components": [
+        {
+            "id": "chat_1",
+            "provider": "chat",
+            "name": "Chat Source",
+            "config": {
+                "hideForm": true,
+                "mode": "Source",
+                "parameters": {},
+                "type": "chat"
+            },
+            "ui": {
+                "position": { "x": 20, "y": 200 },
+                "nodeType": "default",
+                "formDataValid": true
+            }
+        },
+        {
+            "id": "response_answers_1",
+            "provider": "response_answers",
+            "name": "Return Answers",
+            "config": {
+                "laneName": "answers"
+            },
+            "ui": {
+                "position": { "x": 460, "y": 200 },
+                "nodeType": "default",
+                "formDataValid": true
+            }
+        }
+    ],
+    "project_id": "hackathon-injest",
+    "version": 1,
+    "isLocked": false,
+    "snapToGrid": true,
+    "snapGridSize": [10, 10],
+    "docRevision": 1
+}
