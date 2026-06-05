@@ -74,33 +74,6 @@
             ]
         },
         {
-            "id": "tool_xtrace_memory_1",
-            "provider": "tool_xtrace_memory",
-            "name": "XTrace Memory",
-            "config": {
-                "api_key": "${ROCKETRIDE_XTRACE_API_KEY}",
-                "org_id": "${ROCKETRIDE_XTRACE_ORG_ID}",
-                "group_ids": "",
-                "show_advanced": false,
-                "type": "tool_xtrace_memory",
-                "user_id": "${ROCKETRIDE_XTRACE_USER_ID}",
-                "agent_id": "assistant",
-                "search_mode": "compose",
-                "parameters": {}
-            },
-            "ui": {
-                "position": { "x": 500, "y": 360 },
-                "nodeType": "default",
-                "formDataValid": true
-            },
-            "control": [
-                {
-                    "classType": "tool",
-                    "from": "agent_rocketride_1"
-                }
-            ]
-        },
-        {
             "id": "response_answers_1",
             "provider": "response_answers",
             "name": "Return Answers",
@@ -125,5 +98,5 @@
     "isLocked": false,
     "snapToGrid": true,
     "snapGridSize": [10, 10],
-    "docRevision": 1
+    "docRevision": 2
 }
