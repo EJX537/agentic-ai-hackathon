@@ -31,8 +31,11 @@ export const config = {
   },
 
   butterbase: {
-    apiUrl: env("BUTTERBASE_API_URL", "http://localhost:4000"),
-    apiKey: env("BUTTERBASE_API_KEY", ""),
+    apiUrl: env("BUTTERBASE_API_URL", "https://api.butterbase.ai"),
+    appId: env("BUTTERBASE_APP_ID"),
+    anonKey: env("BUTTERBASE_ANON_KEY", ""),
+    authEmail: env("BUTTERBASE_AUTH_EMAIL", ""),
+    authPassword: env("BUTTERBASE_AUTH_PASSWORD", ""),
   },
 } as const;
 

@@ -1,30 +1,166 @@
 {
     "components": [
         {
-            "id": "chat_1",
-            "provider": "chat",
-            "name": "Chat Source",
+            "id": "dropper_1",
+            "provider": "dropper",
+            "name": "Dropper",
             "config": {
                 "hideForm": true,
                 "mode": "Source",
                 "parameters": {},
-                "type": "chat"
+                "type": "dropper",
+                "name": "Dropper"
             },
             "ui": {
-                "position": { "x": 20, "y": 200 },
+                "position": {
+                    "x": -150,
+                    "y": 200
+                },
                 "nodeType": "default",
                 "formDataValid": true
             }
         },
         {
-            "id": "response_answers_1",
-            "provider": "response_answers",
-            "name": "Return Answers",
+            "id": "preprocessor_llm_1",
+            "provider": "preprocessor_llm",
+            "name": "LLM",
             "config": {
-                "laneName": "answers"
+                "profile": "default",
+                "default": {
+                    "numberOfTokens": 384
+                },
+                "name": "LLM"
             },
             "ui": {
-                "position": { "x": 460, "y": 200 },
+                "position": {
+                    "x": 250,
+                    "y": 190
+                },
+                "nodeType": "default",
+                "formDataValid": true
+            },
+            "input": [
+                {
+                    "lane": "table",
+                    "from": "parse_1"
+                },
+                {
+                    "lane": "text",
+                    "from": "parse_1"
+                }
+            ]
+        },
+        {
+            "id": "parse_1",
+            "provider": "parse",
+            "name": "Parser",
+            "config": {
+                "name": "Parser"
+            },
+            "ui": {
+                "position": {
+                    "x": 20,
+                    "y": 170
+                },
+                "nodeType": "default",
+                "formDataValid": true
+            },
+            "input": [
+                {
+                    "lane": "tags",
+                    "from": "dropper_1"
+                }
+            ]
+        },
+        {
+            "id": "llm_openai_api_2",
+            "provider": "llm_openai_api",
+            "name": "OpenAI-Compatible API",
+            "config": {
+                "profile": "custom",
+                "custom": {},
+                "name": "OpenAI-Compatible API"
+            },
+            "ui": {
+                "position": {
+                    "x": 250,
+                    "y": 340
+                },
+                "nodeType": "default",
+                "formDataValid": false
+            },
+            "control": [
+                {
+                    "classType": "llm",
+                    "from": "preprocessor_llm_1"
+                }
+            ],
+            "input": [
+                {
+                    "lane": "questions",
+                    "from": "prompt_1"
+                }
+            ]
+        },
+        {
+            "id": "response_documents_1",
+            "provider": "response_documents",
+            "name": "Return Documents",
+            "config": {
+                "laneName": "documents",
+                "name": "Return Documents"
+            },
+            "ui": {
+                "position": {
+                    "x": 420,
+                    "y": 90
+                },
+                "nodeType": "default",
+                "formDataValid": true
+            },
+            "input": [
+                {
+                    "lane": "documents",
+                    "from": "preprocessor_llm_1"
+                }
+            ]
+        },
+        {
+            "id": "response_image_1",
+            "provider": "response_image",
+            "name": "Return Image",
+            "config": {
+                "laneName": "image",
+                "name": "Return Image"
+            },
+            "ui": {
+                "position": {
+                    "x": 250,
+                    "y": 100
+                },
+                "nodeType": "default",
+                "formDataValid": true
+            },
+            "input": [
+                {
+                    "lane": "image",
+                    "from": "parse_1"
+                }
+            ]
+        },
+        {
+            "id": "prompt_1",
+            "provider": "prompt",
+            "name": "Prompt",
+            "config": {
+                "instructions": [],
+                "name": "Prompt"
+            },
+            "ui": {
+                "position": {
+                    "x": 20,
+                    "y": 320
+                },
                 "nodeType": "default",
                 "formDataValid": true
             }
@@ -34,6 +170,9 @@
     "version": 1,
     "isLocked": false,
     "snapToGrid": true,
-    "snapGridSize": [10, 10],
-    "docRevision": 1
+    "snapGridSize": [
+        10,
+        10
+    ],
+    "docRevision": 70
 }

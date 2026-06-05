@@ -1,0 +1,78 @@
+Agentic AI SF Hackathon — Official Problem Statement
+Theme: Building Production-Ready Agentic AI Applications with RocketRide, Butterbase, XTrace, and Photon
+The next wave of AI isn't just intelligent — it's operational. Agents that reason, remember, persist data, reach users where they already are, and can be trusted in production. This hackathon challenges you to combine four complementary technologies to build agentic applications that actually ship: powerful pipelines, instant backends, observability, and the messaging infrastructure to put agents in the interfaces people already live on.
+Core Challenge
+Design and build an innovative agentic application that:
+
+RocketRide: Construct and orchestrate AI pipelines and multi-agent workflows directly inside your development environment.
+Butterbase: Build the entire backend (database, auth, storage, AI model gateway) with zero DevOps.
+XTrace: Provide a persistent, self-revising memory layer that extracts facts and reconciles contradictions over time.
+Photon (Spectrum): Deploy your agent to messaging platforms (iMessage, WhatsApp, Slack, etc.) so users don't need to visit a separate website.
+Mandatory Requirements
+RocketRide Usage: Use for core data/AI pipelines and workflows; pipelines must be meaningfully connected to logic.
+Butterbase Integration: Provision and serve the backend, integrating database, auth, and the AI Model Gateway.
+XTrace Integration: Use the Memory API to allow agents to actively write to and read from a persistent history.
+Photon Integration: Deliver the agent through at least one real messaging platform (e.g., iMessage, WhatsApp, Slack).
+Deep Integration: All four technologies must be woven into the core product experience to avoid disqualification.
+Technology Primers
+🚀 RocketRide — AI Pipeline Infrastructure in Your IDE
+RocketRide is an open-source AI pipeline builder with a high-performance C++ core. Build visually in VS Code and ship to production. It supports 13 LLM providers and multi-agent orchestration.
+🧈 Butterbase — Backend for AI Builders
+An AI-optimized Backend-as-a-Service. It automates database, auth, APIs, and file storage. It includes an AI model gateway for unified access to GPT, Claude, and Gemini.
+🧠 XTrace — One Brain Across Every Tool
+A hosted memory platform that extracts durable facts from conversations and tracks artifacts. It automatically revises old beliefs when new information contradicts them.
+💬 Photon (Spectrum) — Bring Your Agents to Users
+An open-source framework that connects agents to iMessage, WhatsApp, Telegram, and more via a single API. It adapts message structures natively per platform with edge delivery.
+Suggested Problem Tracks
+Track
+Problem
+Solution Summary
+1. Agentic Onboarding Assistant
+New hires lose context across scattered docs and Slack.
+RocketRide: Ingestion pipeline. Butterbase: User profiles/progress. XTrace: Company knowledge brain. Photon: Daily check-ins via Slack/iMessage.
+2. Autonomous Code Review Agent
+PR reviews are slow; architectural context is lost.
+RocketRide: Static analysis pipeline. Butterbase: Review history. XTrace: Architectural memory. Photon: Approval requests via Slack/Discord threads.
+3. Customer Support Co-Pilot
+Reps hunt for answers across internal docs.
+RocketRide: Ticket routing pipeline. Butterbase: Ticket records. XTrace: Known workarounds. Photon: Customer support over WhatsApp/iMessage.
+4. AI Research Synthesizer
+Teams repeat research; insights never resurface.
+RocketRide: Synthesis pipeline. Butterbase: Research artifacts. XTrace: Living research brain. Photon: Topic digests via Telegram/Slack.
+5. Sales Intelligence Agent
+Sales reps lack account context before meetings.
+RocketRide: Briefing aggregation. Butterbase: Sync account data. XTrace: Relationship memory. Photon: Pre-meeting briefs via WhatsApp.
+6. AI Operations Monitor
+Teams can't diagnose production agent behavior.
+RocketRide: Anomaly detection. Butterbase: Incident history. XTrace: Incident pattern-matching. Photon: Alerts and interactive remediation via Slack.
+7. Adaptive Learning Tutor
+Students need personalized, persistent support.
+RocketRide: Adaptive questioning. Butterbase: Progress history. XTrace: Knowledge gap memory. Photon: Practice nudges via iMessage.
+8. Startup Due Diligence Agent
+Manual research and data rooms are slow.
+RocketRide: Document ingestion. Butterbase: Secure data room. XTrace: Deal brain. Photon: Instant summaries over Telegram between meetings.
+9. Async Team Intelligence Bot
+Remote teams lose context in long threads.
+RocketRide: Blocker extraction. Butterbase: Standup records. XTrace: Decision memory. Photon: Standup submissions via WhatsApp.
+10. Open Innovation Track
+Developers can't keep up with research/repos.
+RocketRide: Research crawler. Butterbase: Subscription storage. XTrace: Evolving knowledge brain. Photon: Curated updates via Discord.
+
+Submission & Deliverables
+Setup: Connect to Butterbase before starting.
+Sign up: dashboard.butterbase.ai.
+Promo Code: [HAVEFUN0605] (Redeem in billing).
+Final Submission: Paste into your AI agent: "Submit my project to the hackathon. Submission code: havefun0605. Hackathon slug: agentic-ai-Hackathon".
+Instructions doc
+Join our 10:15am Workshop Via zoom
+Deliverables:
+Working Prototype: Live or local demo.
+Source Code: Repository link.
+Project Description: Detail problem, tech usage, and integration.
+Pitch Deck/Video: Optional.
+
+
+XTrace Submission Path:
+Sign up for SDK: app.xtrace.ai
+Discord Channel: https://discord.gg/r6En9Qg6
+Submission Form: https://forms.gle/uTny216sTmHf1mYw5
