@@ -96,7 +96,7 @@ export class AgentOrchestrator {
         const result = await this.rocketride.send(sendOpts);
 
         // Extract the output string from the pipeline result
-        const replyText = extractReply(result.output);
+        const replyText = result.text;
 
         // ── 5. Persist the interaction as new memories ────────────────
         await this.memory.ingestMessages(
@@ -148,26 +148,4 @@ export class AgentOrchestrator {
     await this.rocketride.disconnect();
     await this.messaging.shutdown();
   }
-}
-
-// ── Helpers ─────────────────────────────────────────────────────────────
-
-/**
- * Extract a string reply from the RocketRide pipeline output.
- * The result shape varies by pipeline config; we handle common cases.
- */
-function extractReply(output: unknown): string {
-  if (typeof output === "string") return output;
-  if (output === null || output === undefined) return "";
-  if (Array.isArray(output)) {
-    return output.map(extractReply).join("\n");
-  }
-  if (typeof output === "object") {
-    const obj = output as Record<string, unknown>;
-    // Common result fields from chat/processing pipelines
-    return String(
-      obj.answer ?? obj.text ?? obj.output ?? obj.result ?? obj.content ?? JSON.stringify(obj),
-    );
-  }
-  return String(output);
 }
