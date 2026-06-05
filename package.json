@@ -12,6 +12,8 @@
     "format": "bunx biome format --write src/"
   },
   "dependencies": {
+    "ax": "file:/Users/ejx/Documents/Github/ax",
+    "ax-autobindgen": "file:/Users/ejx/Documents/Github/ax/extensions/autobindgen",
     "@butterbase/sdk": "^2.4.0",
     "@xtraceai/memory": "^0.2.1",
     "rocketride": "^1.2.0",
