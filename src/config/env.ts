@@ -4,9 +4,11 @@
  * Bun reads .env files automatically. See `.env.example` for required keys.
  */
 
+function env(name: string): string;
+function env(name: string, fallback: string): string;
 function env(name: string, fallback?: string): string {
   const value = process.env[name] ?? fallback;
-  if (!value) {
+  if (value === undefined) {
     throw new Error(`Missing required environment variable: ${name}`);
   }
   return value;
