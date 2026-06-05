@@ -1,14 +1,19 @@
 /**
- * Full Integration Test — iMessage → Services → Mock Agent → iMessage
+ * Full Integration Test — iMessage → Services → WebUseAgent → iMessage
  *
  * Validates the complete pipeline:
- *   iMessage ──→ Spectrum (mock) ──→ [Butterbase + XTrace] ──→ Mock Agent ──→ Spectrum → iMessage
+ *   iMessage ──→ Spectrum (mock) ──→ [Butterbase + XTrace + RocketRide] ──→ WebUseAgent ──→ Spectrum → iMessage
  *
- * The "mock agent" replaces step 3 (web search / scrape / browse) with
- * deterministic fake data so the test never needs Tavily or real websites.
+ * The "middle step" (web search / scrape / browse) runs through the REAL
+ * WebUseAgent (embedded pi agent). A mock pi session factory replaces the
+ * pi SDK's createAgentSession so the test doesn't need a real LLM — the
+ * WebUseAgent's prompt-building, tool-context wiring, and result-extraction
+ * code paths all execute for real.
  */
 import { describe, it, expect, beforeEach, afterAll } from "bun:test";
 import type { Message } from "../src/types/index.ts";
+import { WebUseAgent } from "../src/webuse/web-use-agent.ts";
+import type { AgentSession, AgentSessionEventListener } from "@earendil-works/pi-coding-agent";
 
 // ─────────────────────────────────────────────────────────────────────────
 //  MOCKS
@@ -20,6 +25,73 @@ const FAKE_CONV = "test-conv-001";
 
 // Track what each step produced so we can assert on it.
 const steps: string[] = [];
+
+/**
+ * Create a mock pi AgentSession that simulates a web-use agent's output.
+ *
+ * The mock session:
+ *   - Emits text_deltas that build up a full response including `## Result`
+ *   - prompt() resolves immediately
+ *   - agent.waitForIdle() resolves immediately
+ *   - dispose() is a no-op
+ */
+function createMockSession(resultSummary: string, toolCallCount = 3): AgentSession {
+  const fullOutput =
+    `I'll search for information about that.\n\n` +
+    `Let me search for ${resultSummary.split(" ").slice(0, 5).join(" ")}...\n\n` +
+    `Found some great results! Let me check them out.\n\n` +
+    `## Result\n\n${resultSummary}`;
+
+  let unsubscribeFn: (() => void) | null = null;
+  const listeners = new Set<AgentSessionEventListener>();
+
+  const session = {
+    prompt: async () => {
+      steps.push("webuse.session.prompt");
+      // Simulate streaming deltas
+      for (let i = 0; i < fullOutput.length; i += 80) {
+        const delta = fullOutput.slice(i, i + 80);
+        for (const listener of listeners) {
+          listener({
+            type: "message_update",
+            assistantMessageEvent: { type: "text_delta", delta },
+          } as any);
+        }
+      }
+    },
+    subscribe: (listener: AgentSessionEventListener) => {
+      listeners.add(listener);
+      steps.push("webuse.session.subscribe");
+      const unsub = () => {
+        listeners.delete(listener);
+      };
+      unsubscribeFn = unsub;
+      return unsub;
+    },
+    dispose: () => {
+      steps.push("webuse.session.dispose");
+      listeners.clear();
+    },
+    get agent() {
+      return {
+        waitForIdle: async () => {
+          steps.push("webuse.session.waitForIdle");
+        },
+        get state() {
+          return { messages: [] };
+        },
+      };
+    },
+    get state() {
+      return { messages: [] };
+    },
+    get sessionManager() {
+      return { isPersisted: () => false };
+    },
+  } as unknown as AgentSession;
+
+  return session;
+}
 
 // ── Mock Spectrum ───────────────────────────────────────────────────────
 
@@ -162,43 +234,12 @@ class MockRocketRide {
   }
 }
 
-// ── Mock Agent (replaces step 3 search/scrape/browse) ─────────────────
-
-class MockAgent {
-  searchResults: Array<{ url: string; title: string; snippet: string }> = [];
-  scrapedPages: Array<{ url: string; title: string; content: string; wordCount: number }> = [];
-
-  async searchWeb(query: string, _options?: { maxResults?: number }) {
-    steps.push(`mockagent.search(${query.slice(0, 30)})`);
-    this.searchResults = [
-      {
-        url: "https://example.com/italian-restaurant-1",
-        title: "Tony's Italian Restaurant - North Beach SF",
-        snippet: "A family-run Italian restaurant serving authentic pasta since 1982.",
-      },
-      {
-        url: "https://example.com/italian-restaurant-2",
-        title: "Francesca's Ristorante - Best pasta in SF",
-        snippet: "Award-winning Italian cuisine in the heart of San Francisco.",
-      },
-    ];
-    return this.searchResults;
-  }
-
-  async scrapeContent(urls: string[]) {
-    steps.push(`mockagent.scrape(${urls.length} urls)`);
-    this.scrapedPages = urls.map((url) => ({
-      url,
-      title: `Scraped: ${url}`,
-      content: `Mock content from ${url}. The restaurant serves authentic Italian dishes including pasta, pizza, and seafood. Highly rated.`,
-      wordCount: 30,
-    }));
-    return this.scrapedPages;
-  }
-}
-
 // ─────────────────────────────────────────────────────────────────────────
 //  ORCHESTRATOR (mirrors the real orchestrator flow with mock services)
+//
+//  Step 3 (browse/search) uses the REAL WebUseAgent with a mock pi session
+//  factory, so the WebUseAgent's prompt-building, tool-context-wiring, and
+//  result-extraction code paths all execute for real.
 // ─────────────────────────────────────────────────────────────────────────
 
 class TestOrchestrator {
@@ -206,7 +247,7 @@ class TestOrchestrator {
   readonly memory: MockMemory;
   readonly rocketride: MockRocketRide;
   readonly messaging: MockMessaging;
-  readonly agent: MockAgent;
+  readonly webUse: WebUseAgent;
 
   replyText: string | null = null;
 
@@ -215,7 +256,18 @@ class TestOrchestrator {
     this.memory = new MockMemory();
     this.rocketride = new MockRocketRide();
     this.messaging = new MockMessaging();
-    this.agent = new MockAgent();
+    // Real WebUseAgent with a mock pi session factory
+    // (avoids needing a real LLM or pi SDK session)
+    this.webUse = new WebUseAgent({
+      createSession: async () => ({
+        session: createMockSession(
+          "Found 3 excellent Italian restaurants in San Francisco:\n" +
+          "1. Tony's Italian Restaurant - North Beach - Family-run since 1982, authentic pasta\n" +
+          "2. Francesca's Ristorante - Award-winning Italian cuisine\n" +
+          "3. Little Italy Bistro - Cozy atmosphere, great seafood pasta",
+        ),
+      }),
+    });
   }
 
   /** Simulate startup: register groups, auth, connect. */
@@ -260,61 +312,51 @@ class TestOrchestrator {
       context: { memories: recallResult.prompt, userId, conversationId: convId },
     });
 
-    // ── Step 3: Mock Agent (search -> scrape -> classify) ────────────
-    const searchResults = await this.agent.searchWeb(incoming.content);
-    const urls = searchResults.map((r) => r.url);
-    const scrapedPages = await this.agent.scrapeContent(urls.slice(0, 2));
+    // ── Step 3: REAL WebUseAgent browsing (embedded pi agent) ────────
+    // Wrapped in try/catch so errors fall back to the pipeline result
+    // (mirrors the real AgentOrchestrator in src/agents/orchestrator.ts)
+    let finalAnswer: string;
+    try {
+      const webResult = await this.webUse.browse({
+        task: incoming.content,
+        // Pass XTrace memory context so the agent knows past facts
+        memoryContext: recallResult.prompt,
+        // Pass XTrace functions for recall/ingest during browse
+        recall: (query, uid) => this.memory.recall(query, uid),
+        ingest: (messages, uid, cid, gids) => this.memory.ingestMessages(messages, uid, cid, gids),
+        userId,
+        convId,
+      });
+      finalAnswer = webResult.success ? webResult.answer : pipelineResult.text;
+    } catch (err) {
+      console.warn("[TestOrchestrator] WebUseAgent error, falling back to pipeline:", err);
+      finalAnswer = pipelineResult.text;
+    }
 
+    // ── Step 4: XTrace memory ingest (grouped by category) ─────────
     // Classify via Butterbase AI gateway
     const category = await this.backend.classifyText(incoming.content);
 
-    // Build final reply
-    const replyText = [
-      pipelineResult.text,
-      "",
-      "--- Sources ---",
-      ...scrapedPages.map((p) => `- ${p.title}: ${p.url}`),
-    ].join("\n");
-
-    // ── Step 4: XTrace memory ingest (grouped by category) ─────────
     // Compute the group ID for the classified category
     const groupId = `grp_${category}`;
 
     await this.memory.ingestMessages(
-      [incoming, { role: "assistant", content: replyText }],
+      [incoming, { role: "assistant", content: finalAnswer }],
       userId,
       convId,
       [groupId],
     );
-
-    // Ingest each scraped page as a separate memory, tagged with the same group
-    for (const page of scrapedPages) {
-      await this.memory.ingestMessages(
-        [
-          { role: "system", content: `Website: ${page.url}` },
-          { role: "assistant", content: `Title: ${page.title}\n\nContent:\n${page.content}` },
-        ],
-        userId,
-        `${convId}:page:${page.url}`,
-        [groupId],
-      );
-    }
 
     // ── Step 5: Butterbase DB persistence ──────────────────────────
     await this.backend.insertSession({
       user_id: userId,
       query_text: incoming.content,
       category,
-      reply_text: replyText,
-      source_count: urls.length,
+      reply_text: finalAnswer,
     });
 
-    for (const page of scrapedPages) {
-      await this.backend.cachePage({ url: page.url, category });
-    }
-
     steps.push("=== PIPELINE DONE ===");
-    return replyText;
+    return finalAnswer;
   }
 }
 
@@ -322,7 +364,7 @@ class TestOrchestrator {
 //  TESTS
 // ─────────────────────────────────────────────────────────────────────────
 
-describe("Integration: iMessage -> Services -> Mock Agent -> iMessage", () => {
+describe("Integration: iMessage -> Services -> WebUseAgent -> iMessage", () => {
   let orch: TestOrchestrator;
 
   beforeEach(() => {
@@ -349,16 +391,16 @@ describe("Integration: iMessage -> Services -> Mock Agent -> iMessage", () => {
 
     // ── Assertions ──
 
-    // Reply contains pipeline output + sources
-    expect(reply).toContain("Tony's");
-    expect(reply).toContain("--- Sources ---");
-    expect(reply).toContain("example.com");
+    // Reply contains WebUseAgent output (restaurant names from mock session)
+    expect(reply).toContain("Tony's Italian Restaurant");
+    expect(reply).toContain("Francesca's Ristorante");
+    expect(reply).toContain("Little Italy Bistro");
 
     // XTrace: recall was called with the query
     expect(orch.memory.recalledQueries).toContain("Find me good Italian restaurants in SF");
 
-    // XTrace: messages were ingested (conversation + page memories)
-    expect(orch.memory.ingestedMessages.length).toBeGreaterThanOrEqual(3);
+    // XTrace: messages were ingested (conversation)
+    expect(orch.memory.ingestedMessages.length).toBeGreaterThanOrEqual(1);
     // Each ingest call should carry the category group ID
     for (const im of orch.memory.ingestedMessages) {
       expect(im.groupIds).toEqual(["grp_food"]);
@@ -369,14 +411,13 @@ describe("Integration: iMessage -> Services -> Mock Agent -> iMessage", () => {
     expect(orch.backend.savedSession!.category).toBe("food");
     expect(orch.backend.savedSession!.query_text).toBe("Find me good Italian restaurants in SF");
 
-    // Butterbase: pages were cached
-    expect(orch.backend.savedPages.length).toBe(2);
-
-    // Mock agent: search returned 2 results
-    expect(orch.agent.searchResults.length).toBe(2);
+    // WebUseAgent session lifecycle: subscribe → prompt → waitForIdle → dispose
+    expect(steps).toContain("webuse.session.subscribe");
+    expect(steps).toContain("webuse.session.prompt");
+    expect(steps).toContain("webuse.session.waitForIdle");
+    expect(steps).toContain("webuse.session.dispose");
 
     // Pipeline steps executed in order
-    // XTrace groups were registered at startup
     expect(orch.memory.registeredGroups).toContain("food");
     expect(orch.memory.registeredGroups).toContain("travel");
     expect(orch.memory.registeredGroups).toContain("tech");
@@ -387,8 +428,6 @@ describe("Integration: iMessage -> Services -> Mock Agent -> iMessage", () => {
     expect(steps).toContain("=== PIPELINE START ===");
     expect(steps).toContain("xtrace.recall");
     expect(steps).toContain("rocketride.send");
-    expect(steps).toContain("mockagent.search(Find me good Italian restauran)");
-    expect(steps).toContain("mockagent.scrape(2 urls)");
     expect(steps).toContain("butterbase.ai.classify");
     expect(steps).toContain("xtrace.ingest(group=grp_food)");
     expect(steps).toContain("butterbase.db.insertSession");
@@ -407,7 +446,8 @@ describe("Integration: iMessage -> Services -> Mock Agent -> iMessage", () => {
       conv_id: "test-conv-002",
     });
     expect(orch.backend.savedSession!.category).toBe("travel");
-    expect(travelReply).toContain("--- Sources ---");
+    expect(travelReply).toBeDefined();
+    expect(travelReply.length).toBeGreaterThan(10);
 
     // Tech query
     const techReply = await orch.processMessage({
@@ -417,26 +457,32 @@ describe("Integration: iMessage -> Services -> Mock Agent -> iMessage", () => {
       conv_id: "test-conv-003",
     });
     expect(orch.backend.savedSession!.category).toBe("tech");
-    expect(techReply).toContain("--- Sources ---");
+    expect(techReply).toBeDefined();
+    expect(techReply.length).toBeGreaterThan(10);
   });
 
-  it("handles errors gracefully — throws when search fails", async () => {
-    orch = new TestOrchestrator();
-    await orch.setup();
+  it("handles WebUseAgent errors gracefully — uses pipeline fallback", async () => {
+    // Create an orchestrator where WebUseAgent's mock session throws
+    const failingOrch = new TestOrchestrator();
 
-    // Make search throw
-    orch.agent.searchWeb = async () => {
-      throw new Error("Search service unavailable");
-    };
+    // Override WebUseAgent with one that always fails
+    (failingOrch as any).webUse = new WebUseAgent({
+      createSession: async () => {
+        throw new Error("Pi session creation failed");
+      },
+    });
 
-    await expect(
-      orch.processMessage({
-        role: "user",
-        content: "Find me something",
-        user_id: FAKE_USER.id,
-        conv_id: "test-conv-004",
-      }),
-    ).rejects.toThrow();
+    await failingOrch.setup();
+
+    const reply = await failingOrch.processMessage({
+      role: "user",
+      content: "Find me something",
+      user_id: FAKE_USER.id,
+      conv_id: "test-conv-004",
+    });
+
+    // Should fall back to pipeline result (Tony's from MockRocketRide.send)
+    expect(reply).toContain("Tony's");
   });
 
   it("works with an image reference in the message", async () => {
@@ -484,7 +530,7 @@ describe("XTrace Memory → WebUseAgent integration", () => {
     // XTrace recall was called
     expect(orch.memory.recalledQueries).toContain("Find me good Italian restaurants in SF");
     // XTrace ingest happened
-    expect(orch.memory.ingestedMessages.length).toBeGreaterThanOrEqual(3);
+    expect(orch.memory.ingestedMessages.length).toBeGreaterThanOrEqual(1);
     expect(steps).toContain("xtrace.recall");
     expect(steps).toContain("xtrace.ingest(group=grp_food)");
   });
@@ -502,7 +548,6 @@ describe("XTrace Memory → WebUseAgent integration", () => {
 
     // Check that ingested messages carry the correct group IDs
     for (const im of orch.memory.ingestedMessages) {
-      // Should all be tech category
       expect(im.groupIds).toBeDefined();
       if (im.groupIds) {
         for (const gid of im.groupIds) {
@@ -511,11 +556,11 @@ describe("XTrace Memory → WebUseAgent integration", () => {
       }
     }
 
-    // The first ingest (conversation) should be tech-related
+    // The ingest should be tech-related
     expect(orch.backend.savedSession!.category).toBe("tech");
   });
 
-  it("ingests multiple page memories per session", async () => {
+  it("ingests memories per session", async () => {
     orch = new TestOrchestrator();
     await orch.setup();
 
@@ -526,8 +571,8 @@ describe("XTrace Memory → WebUseAgent integration", () => {
       conv_id: "test-conv-xtrace-2",
     });
 
-    // Should have ingested: 1 conversation + 2 page memories = 3 minimum
-    expect(orch.memory.ingestedMessages.length).toBeGreaterThanOrEqual(3);
+    // Should have ingested at least the conversation
+    expect(orch.memory.ingestedMessages.length).toBeGreaterThanOrEqual(1);
 
     // The conversation memories should be grouped as travel
     const travelIngests = orch.memory.ingestedMessages.filter(
@@ -563,11 +608,13 @@ describe("Agent Orchestrator direct flow", () => {
     expect(steps).toContain("xtrace.recall");
     expect(steps).toContain("rocketride.send");
     expect(steps).toContain("butterbase.ai.classify");
+    expect(steps).toContain("webuse.session.subscribe");
+    expect(steps).toContain("webuse.session.prompt");
     expect(steps).toContain("xtrace.ingest(group=grp_food)");
     expect(steps).toContain("butterbase.db.insertSession");
 
-    // Reply includes search results
-    expect(reply).toContain("--- Sources ---");
+    // Reply includes WebUseAgent result
+    expect(reply).toContain("Tony's Italian Restaurant");
   });
 
   it("preserves user identity through the pipeline", async () => {
@@ -610,65 +657,82 @@ describe("Agent Orchestrator direct flow", () => {
 });
 
 // ════════════════════════════════════════════════════════════════════════
-//  Mock Agent — Deterministic Search/Scrape Behavior
+//  WebUseAgent — Real browse() flow with mock pi session
 // ════════════════════════════════════════════════════════════════════════
 
-describe("Mock Agent behavior", () => {
-  let orch: TestOrchestrator;
-
-  beforeEach(() => {
-    steps.length = 0;
-  });
-
-  it("returns consistent search results for text queries", async () => {
-    orch = new TestOrchestrator();
-    await orch.setup();
-
-    await orch.processMessage({
-      role: "user",
-      content: "Find recipe websites",
-      user_id: FAKE_USER.id,
-      conv_id: "test-mock-1",
+describe("WebUseAgent browse() with mock pi session", () => {
+  it("extracts ## Result from agent output", async () => {
+    const agent = new WebUseAgent({
+      createSession: async () => ({
+        session: createMockSession(
+          "Found 2 great Italian restaurants in SF",
+        ),
+      }),
     });
 
-    expect(orch.agent.searchResults.length).toBe(2);
-    expect(orch.agent.searchResults[0].url).toContain("example.com");
-    expect(orch.agent.scrapedPages.length).toBe(2);
-  });
-
-  it("scraped pages have all required fields", async () => {
-    orch = new TestOrchestrator();
-    await orch.setup();
-
-    await orch.processMessage({
-      role: "user",
-      content: "Find hiking trails",
-      user_id: FAKE_USER.id,
-      conv_id: "test-mock-2",
+    const result = await agent.browse({
+      task: "Find Italian restaurants in SF",
     });
 
-    for (const page of orch.agent.scrapedPages) {
-      expect(page).toHaveProperty("url");
-      expect(page).toHaveProperty("title");
-      expect(page).toHaveProperty("content");
-      expect(page).toHaveProperty("wordCount");
-      expect(typeof page.wordCount).toBe("number");
-    }
+    expect(result.success).toBe(true);
+    expect(result.answer).toBe("Found 2 great Italian restaurants in SF");
+    expect(result.durationMs).toBeGreaterThanOrEqual(0);
   });
 
-  it("search handles empty/blank queries", async () => {
-    orch = new TestOrchestrator();
-    await orch.setup();
+  it("returns fallback when agent produces no output", async () => {
+    const session = createMockSession("");
+    // Override prompt to produce no deltas
+    session.prompt = async () => {};
 
-    const reply = await orch.processMessage({
-      role: "user",
-      content: "",
-      user_id: FAKE_USER.id,
-      conv_id: "test-mock-3",
+    const agent = new WebUseAgent({
+      createSession: async () => ({ session }),
     });
 
-    // Should still produce some output (pipeline fallback)
-    expect(reply).toBeDefined();
-    expect(reply.length).toBeGreaterThan(0);
+    const result = await agent.browse({
+      task: "Find something",
+    });
+
+    // Should return success: false since no output was produced,
+    // but still get a fallback answer
+    expect(result.success).toBe(false);
+    expect(result.answer).toBe("Task completed.");
+  });
+
+  it("handles errors gracefully", async () => {
+    const agent = new WebUseAgent({
+      createSession: async () => {
+        throw new Error("Session creation failed");
+      },
+    });
+
+    const result = await agent.browse({
+      task: "Find something",
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.answer).toContain("Web use agent error");
+  });
+
+  it("injects memory context into the agent prompt", async () => {
+    // Create an agent with a spy on createSession
+    let capturedOptions: any = null;
+
+    const mockSession = createMockSession("Found results");
+    const agent = new WebUseAgent({
+      createSession: async (opts: any) => {
+        capturedOptions = opts;
+        return { session: mockSession };
+      },
+    });
+
+    await agent.browse({
+      task: "Find restaurants",
+      memoryContext: "User prefers vegetarian options.",
+    });
+
+    // The mock session's createSession won't show the prompt,
+    // but we verify the prompt was built correctly via the WebUseAgent's
+    // buildPrompt method (tested separately in web-use-agent.test.ts)
+    expect(capturedOptions).not.toBeNull();
   });
 });

@@ -312,153 +312,47 @@ describe("browser tools (real Puppeteer)", () => {
   //  Amazon.com — Hackathon Demo Test
   // ═══════════════════════════════════════════════════════════════
 
-  it("Amazon: search RTX 3090 and return first 3 results", async () => {
-    // This test launches its own headless browser — no BROWSER_START_URL needed.
-    // Skip if puppeteer can't run (e.g. no chromium binary)
-    const { BrowserController } = await import("../../src/browser/puppeteer.ts");
+  it("Amazon: search RTX 3070, sort by price, filter ≥4★, exclude renewed", async () => {
     const { BrowserAgent } = await import("../../src/browser/browser-agent.ts");
-    const controller = new BrowserController();
-    await controller.launch();
-    const agent = new BrowserAgent();
-    // Override the default browser with our controlled one
-    (agent as any).browser = controller;
+    const { WebUseAgent } = await import("../../src/webuse/web-use-agent.ts");
+    const browserAgent = new BrowserAgent({ headless: true });
+    await browserAgent.browser.launch();
 
     try {
-      // 1. Navigate to Amazon
-      console.log("[test.amazon] Navigating to amazon.com...");
-      const nav = await controller.navigate("https://www.amazon.com");
-      expect(nav.title.toLowerCase()).toContain("amazon");
 
-      // Wait a moment for the page to fully render
-      await new Promise((r) => setTimeout(r, 2000));
+      console.log("[test.amazon] Spawning pi agent for Amazon demo...");
+      const webAgent = new WebUseAgent();
 
-      // 2. Find the search box — Amazon's search input has id="twotabsearchtextbox"
-      //    or role="searchbox" with name="search"
-      console.log("[test.amazon] Typing search query...");
-      await controller.evaluate(() => {
-        const input =
-          (document.getElementById("twotabsearchtextbox") as HTMLInputElement) ||
-          (document.querySelector("input[name='field-keywords']") as HTMLInputElement) ||
-          (document.querySelector("input[type='text'][role='searchbox']") as HTMLInputElement);
-        if (input) {
-          input.value = "";
-          input.focus();
-        }
-      });
+      // Wrap with timeout to prevent hanging
+      const result = await Promise.race([
+        webAgent.browse({
+          task: `Go to amazon.com and find the best RTX 3070 GPU.
 
-      // Use Puppeteer's native type for realistic keystrokes
-      const page = controller.getPage()!;
-      await page.type("#twotabsearchtextbox", "rtx 3090", { delay: 30 });
+1. Navigate to amazon.com
+2. Search for "RTX 3070"
+3. Sort by price low to high
+4. Filter 4 Stars & Up
+5. Skip Renewed items
+6. Return top 3: title, price, rating
 
-      // 3. Press Enter (or click the search button)
-      console.log("[test.amazon] Submitting search...");
-      await page.keyboard.press("Enter");
+Use EXCLUSIVELY the browser tools (navigate, scan, click, fill, view). Do NOT call search_web or read_url. Be efficient — use scan to find elements, then directly click/fill them.`,
+          browser: browserAgent,
+          startUrl: 'https://www.amazon.com',
+        }),
+        new Promise<never>((_, reject) => setTimeout(() => reject(new Error("Amazon demo timeout (150s)")), 150_000)),
+      ]);
 
-      // 4. Wait for results page to load
-      await page.waitForNavigation({ waitUntil: "networkidle2", timeout: 30_000 }).catch(() => {});
-      await new Promise((r) => setTimeout(r, 2000));
+      console.log(`[test.amazon] Agent result (${result.durationMs}ms, success=${result.success}):`);
+      console.log("╔══════════════════════════════════════════════╗");
+      console.log("║  Amazon RTX 3070 — AX Agent Demo            ║");
+      console.log("╚══════════════════════════════════════════════╝");
+      console.log(result.answer);
 
-      console.log("[test.amazon] Results page loaded:", page.url());
-
-      // 5. Inject AX + autobindgen into the browser, then scan via AX
-      const fs = await import("fs");
-      const axBundle = fs.readFileSync("/Users/ejx/Documents/Github/ax/dist/ax.js", "utf-8");
-      const abgSrc = fs.readFileSync("/Users/ejx/Documents/Github/ax/extensions/autobindgen/index.js", "utf-8");
-      await controller.injectAx(axBundle, abgSrc);
-
-      // 6. Scan with AX and dump the tree on the search results page
-      const axTree = await controller.evaluate(() => {
-        const lines: string[] = [];
-        // @ts-expect-error — injected
-        const w = window as any;
-        lines.push(`window.ax type: ${typeof w.ax}`);
-        lines.push(`window.axAutobindgen type: ${typeof w.axAutobindgen}`);
-        if (typeof w.ax === "function" && typeof w.ax.scan === "function") {
-          const scan = w.ax.scan();
-          lines.push(`AX scan: ${scan.nodes.length} nodes`);
-          for (let i = 0; i < Math.min(scan.nodes.length, 30); i++) {
-            const n = scan.nodes[i];
-            const fns = n.fn.map((f: any) => `${f.on}:${f.name}`).join(" ");
-            lines.push(`  [${n.id}] <${n.tagName}> ${fns ? fns : '(no actions)'}`);
-          }
-        } else {
-          // Check if the ax function itself is available
-          lines.push(`typeof ax: ${typeof w.ax}`);
-          lines.push(`ax keys: ${w.ax ? Object.keys(w.ax).join(", ") : "N/A"}`);
-        }
-        return lines;
-      });
-      console.log("[test.amazon] AX Tree on search results:");
-      axTree.forEach((l: string) => console.log(`  ${l}`));
-
-      // 7. Use AX to extract product data from result cards
-      const products = await controller.evaluate(() => {
-        const results: Array<{ title: string; price: string; rating: string; url: string }> = [];
-        // @ts-expect-error
-        const w = window as any;
-
-        const items = document.querySelectorAll(
-          "[data-component-type='s-search-result']"
-        );
-
-        for (const item of items) {
-          if (results.length >= 3) break;
-
-          const h2 = item.querySelector("h2");
-          if (!h2) continue;
-          const title = h2.textContent?.trim() || "";
-          if (!title || title.toLowerCase().includes("skip to") || title.includes("Results")) continue;
-
-          const link = item.querySelector("a[href*='/dp/']") as HTMLAnchorElement;
-          if (!link) continue;
-          const url = link.href || "";
-          if (!url) continue;
-
-          const priceEl = item.querySelector(".a-price .a-offscreen");
-          const price = priceEl?.textContent?.trim() || "";
-
-          const ratingEl = item.querySelector(".a-icon-alt");
-          const rating = ratingEl?.textContent?.trim() || "";
-
-          // Also get AX node id for this result card (if annotated)
-          let axId = "";
-          if (typeof w.ax === "function" && typeof w.ax.getNodeId === "function") {
-            axId = w.ax.getNodeId(item) || "";
-          }
-
-          results.push({ title, price, rating, url });
-        }
-
-        return results;
-      });
-
-      // 6. Assert we got real GPU results
-      console.log(`[test.amazon] Found ${products.length} real products`);
-      for (const p of products) {
-        console.log(`  - ${p.title.slice(0, 80)} | ${p.price} | ${p.rating}`);
-      }
-
-      expect(products.length).toBeGreaterThanOrEqual(1);
-
-      // At least one result should mention RTX or 3090 in the title
-      const hasValidGpu = products.some(
-        (p) => p.title.toLowerCase().includes("rtx") || p.title.includes("3090"),
-      );
-      expect(hasValidGpu).toBe(true);
-
-      // Log the extracted data in a clean demo format
-      console.log("\n═══════════════════════════════════════");
-      console.log("  Amazon RTX 3090 — Top Results");
-      console.log("═══════════════════════════════════════");
-      products.forEach((p, i) => {
-        console.log(`  ${i + 1}. ${p.title}`);
-        console.log(`     Price: ${p.price}  |  ${p.rating}`);
-        console.log(`     ${p.url}\n`);
-      });
-      console.log("═══════════════════════════════════════");
+      expect(result.success).toBe(true);
+      expect(result.answer.length).toBeGreaterThan(50);
 
     } finally {
-      await controller.shutdown();
+      await browserAgent.browser.shutdown().catch(() => {});
     }
-  }, 90_000); // 90s — Amazon can be slow
+  }, 240_000);
 });

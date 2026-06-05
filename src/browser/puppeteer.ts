@@ -157,12 +157,20 @@ export class BrowserController {
 
     // Strip ESM export lines — these bundles have `export { ... }` / `export default ...`
     // at the end for Node module consumers but break in a browser context.
-    const cleanAx = axBundle.replace(/^export\s+\{.+\};?$/m, "");
+    // Strip the multi-line export block at the end:
+    //   export {
+    //     src_default as default
+    //   };
+    // Note: the file has a trailing newline before EOF.
+    const cleanAx = axBundle.replace(/export\s*\{[\s\S]*?\};\n*$/, "");
+    // Strip a single-line export default line:
     const cleanAbg = autobindgenBundle.replace(/^export\s+default\s+.+;?$/m, "");
 
-    // Use addScriptTag so the code runs as a proper <script> element.
-    await this.page.addScriptTag({ content: cleanAx });
-    await this.page.addScriptTag({ content: cleanAbg });
+    // Use page.evaluate with the raw code (CDP Runtime.evaluate bypasses CSP).
+    // The bundles use `var name = ...` — inside the CDP async wrapper these are local,
+    // so we explicitly assign to window.
+    await this.page.evaluate(cleanAx + "\nwindow.ax = ax;");
+    await this.page.evaluate(cleanAbg + "\nwindow.axAutobindgen = axAutobindgen;");
 
     // Configure and bind
     await this.page.evaluate(() => {

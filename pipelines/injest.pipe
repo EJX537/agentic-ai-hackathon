@@ -129,7 +129,7 @@
                 "profile": "custom",
                 "custom": {
                     "base_url": "https://api.butterbase.ai/v1",
-                    "model": "google/gemini-3.5-flash",
+                    "model": "deepseek/deepseek-v4-flash",
                     "modelTotalTokens": 5000,
                     "apikey": "bb_sk_acb5cebb737f7bcaad26ea6d3f60296e6147991a"
                 },
@@ -188,8 +188,8 @@
             },
             "ui": {
                 "position": {
-                    "x": 30,
-                    "y": 170
+                    "x": -40,
+                    "y": 140
                 },
                 "nodeType": "default",
                 "formDataValid": true
@@ -204,5 +204,5 @@
         10,
         10
     ],
-    "docRevision": 114
+    "docRevision": 116
 }

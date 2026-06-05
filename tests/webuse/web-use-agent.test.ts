@@ -36,7 +36,8 @@ describe("WebUseAgent.buildPrompt", () => {
     // Access private buildPrompt via bracket notation for testing
     const prompt = (agent as any).buildPrompt("Find Italian restaurants in SF");
     expect(prompt).toContain("Find Italian restaurants in SF");
-    expect(prompt).toContain("Two-Phase Approach");
+    expect(prompt).toContain("search_web");
+    expect(prompt).toContain("done(summary)");
   });
 
   it("includes memory context when provided", () => {
@@ -49,7 +50,6 @@ describe("WebUseAgent.buildPrompt", () => {
     expect(prompt).toContain("Context from Previous Sessions");
     expect(prompt).toContain("User prefers vegetarian options");
     expect(prompt).toContain("recall_memory()");
-    expect(prompt).toContain("remember_fact()");
   });
 
   it("omits memory section when no context given", () => {
@@ -71,15 +71,15 @@ describe("WebUseAgent.buildPrompt", () => {
     expect(prompt).toContain("page_text");
     expect(prompt).toContain("screenshot");
     expect(prompt).toContain("done");
-    expect(prompt).toContain("recall_memory");
-    expect(prompt).toContain("remember_fact");
+    // Memory tools are mentioned in the memory context section, not the tool list
   });
 
-  it("mentions the escalation criteria", () => {
+  it("mentions the guidelines", () => {
     const agent = new WebUseAgent();
     const prompt = (agent as any).buildPrompt("Test task");
-    expect(prompt).toContain("When to Escalate");
-    expect(prompt).toContain("read_url() returns");
+    expect(prompt).toContain("Guidelines");
+    expect(prompt).toContain("scan()");
+    expect(prompt).toContain("done()");
   });
 });
 

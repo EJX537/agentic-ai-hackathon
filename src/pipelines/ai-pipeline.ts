@@ -125,6 +125,7 @@ export class RocketRideService {
       filepath: this.options.filepath,
       pipeline: this.options.pipeline,
       ttl: 3600,
+      useExisting: true, // attach to already-running pipeline
     });
     this.taskToken = result.token;
     console.log(`[RocketRide] Pipeline started — token=${this.taskToken}`);

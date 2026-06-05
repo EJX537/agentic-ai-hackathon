@@ -14,7 +14,6 @@
  *   bun run src/index.ts
  */
 import { AgentOrchestrator } from "./agents/orchestrator.ts";
-import { DomInterface } from "./dom/ax-interface.ts";
 import { BrowserAgent } from "./browser/browser-agent.ts";
 
 // ── Safety: refuse to start without a configured .env ──────────────────
@@ -52,11 +51,6 @@ async function main() {
   console.log("╚══════════════════════════════════════════════════════════╝");
   console.log("");
 
-  // Initialise AX DOM interface (for local DOM annotations)
-  const dom = new DomInterface();
-  dom.init();
-  console.log("[Main] AX DOM interface ready — scanned", dom.scan().length, "actions");
-
   // Initialise Puppeteer browser agent (for remote page automation)
   const browser = new BrowserAgent({ headless: true });
   await browser.start(process.env["BROWSER_START_URL"]);
@@ -78,14 +72,12 @@ async function main() {
   // Graceful shutdown on SIGINT/SIGTERM
   process.on("SIGINT", async () => {
     console.log("\n[Main] Shutting down...");
-    dom.shutdown();
     await browser.shutdown();
     await orchestrator.shutdown();
     process.exit(0);
   });
   process.on("SIGTERM", async () => {
     console.log("\n[Main] Shutting down...");
-    dom.shutdown();
     await browser.shutdown();
     await orchestrator.shutdown();
     process.exit(0);

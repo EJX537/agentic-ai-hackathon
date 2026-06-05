@@ -1,0 +1,11 @@
+{
+    "mcpServers": {
+        "butterbase": {
+            "url": "https://api.butterbase.ai/mcp",
+            "headers": {
+                "Authorization": "Bearer bb_sk_acb5cebb737f7bcaad26ea6d3f60296e6147991a"
+            },
+            "directTools": true
+        }
+    }
+}
