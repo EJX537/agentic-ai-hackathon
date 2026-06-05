@@ -8,43 +8,39 @@ An iMessage-connected agent that researches the web on your behalf. Send a query
 
 ## 1. Data Flow
 
-```
-┌─────────────────────────────────────────────────────────────────────────┐
-│  iMessage ──→ Spectrum ──→ AgentOrchestrator ──→ RocketRide (injest)   │
-│                           ↑                              │               │
-│                           │                              ▼               │
-│                        XTrace ◄── Custom Agent (orchestrator.ts)        │
-│                           │                              │               │
-│                           │                              ▼               │
-│                      Butterbase ◄─────────────────── Store results      │
-│                           │                              │               │
-│                           └──────────── Spectrum ────────┘               │
-│                                        │                                │
-│                                        ▼                                │
-│                                    iMessage                             │
-└─────────────────────────────────────────────────────────────────────────┘
-```
-
-### Message cycle
+### Phase 0: Current (As-Built)
 
 ```
-iMessage ──send──→ Spectrum
-                        │
-                        ▼
-                 orchestrator.start()
-                        │
-               ┌────────┴──────────────┐
-               │ 1. XTrace.recall()    │ ← pull memories by group (food, travel, ...)
-               │ 2. Query RocketRide   │ ──send()──→ injest.pipe
-               │ 3. Custom logic:      │
-               │    a. Tavily/SearXNG  │ ← search indexed web
-               │    b. Trafilatura     │ ← extract content from found pages
-               │    c. Puppeteer+AX    │ ← browse live JS pages, perform actions
-               │    d. XTrace.ingest() │ ← store findings by category group
-               │ 4. Butterbase.save()  │ ← persist results
-               │ 5. Reply via Spectrum │ ← send answer to iMessage
-               └───────────────────────┘
+iMessage ──→ Spectrum ──→ Orchestrator ──→ RocketRide (injest.pipe)
+                                             │
+                                    ┌────────┴──────────────┐
+                                    │ LLM (Butterbase AI)   │
+                                    │   + XTrace tools      │ ← recall/remember
+                                    │   + Butterbase MCP    │ ← DB/Auth/docs
+                                    │   + Internal memory   │
+                                    └────────┬──────────────┘
+                                             │ result
+                                             ▼
+                                    Orchestrator
+                                    ┌────────┴──────────────┐
+                                    │ Custom agent logic    │ ← search, scrape, browse
+                                    │   + XTrace ingest     │ ← store findings
+                                    │   + Butterbase save   │ ← persist
+                                    └────────┬──────────────┘
+                                             │
+                                             ▼
+                                        Spectrum ──→ iMessage
 ```
+
+The pipeline (injest.pipe) does **pre-work** before the custom agent runs:
+- Recalls XTrace memories to ground the response
+- Uses Butterbase AI Gateway for LLM reasoning
+- Stores/retrieves data via Butterbase MCP tools
+- Returns the LLM's analysis to the orchestrator
+
+The orchestrator then runs the **custom agent logic** (search, scrape, browse) and may loop results back through the pipeline.
+
+**Key shift from original plan:** XTrace recall/ingest and Butterbase DB operations are now handled **inside the pipeline** via tool nodes, not just in TypeScript. The orchestrator still owns search/scrape/browse and the final reply.
 
 ---
 
@@ -52,28 +48,32 @@ iMessage ──send──→ Spectrum
 
 ### 2a. RocketRide Pipeline (`pipelines/injest.pipe`)
 
-The pipeline serves as the orchestration entry point. It receives the user's query (text + image references) from the orchestrator and returns the final answer.
+The pipeline now serves as the **LLM reasoning + memory + database** layer. Components:
 
-```json
-Chat Source ──→ [Agent/LLM nodes] ──→ Return Answers
-```
+| Node | Role |
+|---|---|
+| **Chat Source** | Entry point — receives the user query from the orchestrator via `send()` |
+| **RocketRide Wave Agent** | Orchestrates tool calls — decides when to recall, remember, query DB |
+| **LLM (Butterbase AI Gateway)** | LLM provider — `google/gemini-3.5-flash` via `llm_openai_api` |
+| **Memory (Internal)** | Short-term scratchpad for the current run |
+| **XTrace Memory** | Long-term shared memory — `xtrace.recall` / `xtrace.remember` |
+| **Butterbase MCP** | Database CRUD, auth, schema, docs via tool calls |
+| **Return Answers** | Sends the pipeline result back to the orchestrator |
 
-The orchestrator calls `rocketride.send()` with the query, the pipeline processes it through agent/LLM nodes, and the result comes back to the orchestrator for post-processing (memory storage, state persistence, reply).
+The orchestrator passes the query via `rocketride.send()`. The pipeline processes it through the LLM agent (which can call XTrace and Butterbase tools), and returns the final LLM answer.
 
 ### 2b. Custom Agent Logic (in `orchestrator.ts`)
 
-The heavy lifting lives in the orchestrator's message handler. The RocketRide pipeline handles LLM reasoning; the TypeScript layer handles tool integration:
+After the pipeline returns, the orchestrator executes the web research tools:
 
 | Step | Tool | Purpose |
 |---|---|---|
-| Memory recall | XTrace `recall()` | Pull relevant knowledge by group before searching |
 | Web search (indexed) | Tavily AI API or SearXNG | Find relevant pages for the query |
 | Page extraction | Trafilatura | Extract clean text from indexed pages |
 | Live browsing | Puppeteer + AX | Navigate JS-heavy pages, fill forms, click, scrape |
-| Content memory | XTrace `ingest()` | Store page content grouped by category (food, travel, ...) |
-| Memory pull per site | XTrace `recall()` | Before visiting a new site, check what's already known in its group |
-| State persistence | Butterbase DB | Store search sessions, results, user preferences |
-| AI fallback/reasoning | Butterbase AI Gateway | Optional: direct model access for classification/summarization |
+| Classify/categorize | Butterbase AI Gateway or mock | Group results by category |
+| Content memory | XTrace `ingest()` | Store page content grouped by category |
+| State persistence | Butterbase DB | Save sessions, results, cache |
 
 ### 2c. Memory Architecture (XTrace)
 
@@ -81,20 +81,9 @@ Websites are ingested into XTrace organized by **group**, where each group is a 
 
 ```
 Groups:  "food", "travel", "tech", "shopping", "news", ...
-
-Memory per group:
-  - Site URLs discovered
-  - Key facts extracted
-  - Page summaries
-  - Actions available on the page (from AX scan)
 ```
 
-**Flow:**
-1. User sends "Find me Italian restaurants in SF"
-2. Orchestrator calls `xtrace.recall("Italian restaurants SF", { group_ids: ["food"] })`
-3. If memories exist → skip search, return cached + updated info
-4. If no/old memories → Tavily search → visit pages → extract → `xtrace.ingest({ group_ids: ["food"] })`
-5. When browsing a specific restaurant site → `xtrace.recall("dominoc餐厅.com", { group_ids: ["food"] })` to check what's already known about that domain
+The pipeline uses `xtrace.recall` at the start of each turn to ground responses. After the custom agent runs, the orchestrator ingests findings via `xtrace.ingest({ group_ids: [...] })`.
 
 ### 2d. Browser Automation (Puppeteer + AX)
 
@@ -124,10 +113,10 @@ Mandatory: database, auth, AI model gateway.
 
 | Feature | Usage |
 |---|---|
-| **Database** | `client.from("sessions").insert(...)` — store search sessions, results per query, user preferences, website cache |
-| **Auth** | `client.auth.signIn()` — authenticate the iMessage user identity, scope data per user |
-| **AI Model Gateway** | `client.ai.chat()` — fallback LLM for classification (categorize search results), summarization, content extraction when RocketRide is overkill |
-| **KV (existing)** | Keep for ephemeral state (conversation TTL cache) |
+| **Database** (MCP tool) | Via pipeline's Butterbase MCP tool — `butterbase.*` tools for CRUD, schema, RLS |
+| **Auth** (MCP tool) | Via pipeline's Butterbase MCP tool — `butterbase.auth_*` tools |
+| **AI Model Gateway** (LLM node) | Primary LLM for the pipeline — `llm_openai_api` pointing at `https://api.butterbase.ai/v1` |
+| **Classification** (TypeScript SDK) | Fallback: `client.ai.chat()` for categorizing search results in the orchestrator |
 
 **Schema sketch:**
 ```sql
@@ -149,76 +138,109 @@ Already wired. Spectrum handles the platform adapters. The orchestrator's `liste
 
 ## 3. Pipeline Integration Detail
 
-The orchestrator sends to RocketRide via `send()` with a structured payload:
+The orchestrator passes data to the pipeline and handles the result:
 
 ```ts
+// 1. Send to pipeline
 const result = await rocketride.send({
   text: userQuery,
   context: {
-    memories: memoryContext,   // from XTrace recall
-    images: imageRefs,         // from iMessage attachments
-    searchResults: searchJson, // from Tavily/SearXNG (optional, or let pipeline search)
     userId,
     conversationId,
   },
 });
-```
 
-The pipeline's LLM agent receives this as context and produces a final answer. The orchestrator then:
-1. Ingests the answer + sources into XTrace (categorized by group)
-2. Saves the session to Butterbase DB
-3. Sends the reply via Spectrum
+// 2. Pipeline returns LLM-processed answer
+//    (pipeline internally recalled XTrace, used Butterbase, etc.)
+
+// 3. Custom agent logic runs
+const searchResults = await searchTool.search(userQuery);
+const scraped = await scrapeTool.extract(searchResults);
+// ... browse, classify, etc.
+
+// 4. Ingest findings into XTrace (by group)
+await memory.ingest([...findings], { group_ids });
+
+// 5. Persist to Butterbase
+await butterbase.insertSession({ ... });
+
+// 6. Reply
+await spectrum.send({ conversationId, text: finalAnswer });
+```
 
 ---
 
 ## 4. Implementation Order
 
+### Phase 0 (DONE): Foundation & mandatory requirements
+
+| Step | Status |
+|---|---|
+| Project init (Bun + TypeScript) | ✅ |
+| RocketRide core pipeline (injest.pipe) | ✅ — LLM + XTrace + Butterbase MCP tools |
+| Butterbase DB + Auth + AI Gateway | ✅ — pipeline MCP + SDK client |
+| XTrace memory groups | ✅ — group registration, tagged ingest |
+| Spectrum messaging | ✅ — send/receive wired |
+| Integration tests | ✅ — full flow passes |
+| Puppeteer + AX browser automation | ✅ — BrowserAgent ready |
+| Mock search/scrape tools | ✅ — placeholder for Phase 1 |
+
+### Phase 1: Real search & content extraction
+
 ```
-Phase 1: Core search loop
-  └─ Tavily/SearXNG integration (search tool)
+  └─ Tavily AI API integration (search tool)
+  └─ SearXNG fallback (search tool)
   └─ Trafilatura content extraction (scrape tool)
-  └─ Wire into orchestrator's message handler
+  └─ Wire real tools into orchestrator's custom agent logic
   └─ Test: "Find me X" → search → return results via iMessage
+```
 
-Phase 2: XTrace memory by group
-  └─ Define category groups (food, travel, tech, ...)
-  └─ Ingest visited pages by group
-  └─ Recall before search and per-domain
-  └─ Test: same query twice → second is instant from memory
+### Phase 2: Live browsing (Puppeteer + AX)
 
-Phase 3: Live browsing (Puppeteer + AX)
-  └─ Use Puppeteer for JS-heavy pages
-  └─ AX scan for interactive elements
-  └─ Agent decides actions (click, fill, screenshot)
+```
+  └─ Agent decides when to browse (not just search)
+  └─ AX scan → action loop for interactive pages
+  └─ Screenshots for vision-based analysis
   └─ Test: "Check prices on this dynamic site"
+```
 
-Phase 4: Butterbase integration
-  └─ Define DB schema (sessions, results, cache)
-  └─ Butterbase AI gateway for classification/summarization
-  └─ Auth for user identity
-  └─ Persist search history and preferences
+### Phase 3: Full memory loop with categorization
 
-Phase 5: Polish & pipeline tuning
-  └─ Optimize injest.pipe topology
-  └─ Handle image inputs via iMessage
-  └─ Error handling, rate limiting, timeouts
+```
+  └─ Recall before search (pipeline handles this)
+  └─ Classify results into groups (food, travel, tech, ...)
+  └─ Ingest findings by group (orchestrator handles after pipeline)
+  └─ Test: same query twice → pipeline recalls cached knowledge
+```
+
+### Phase 4: Polish & pipeline tuning
+
+```
+  └─ Pipeline topology refinement
+  └─ Image input handling (iMessage attachments → base64 → LLM)
+  └─ Error handling, rate limiting, retries
+  └─ End-to-end smoke test
 ```
 
 ---
 
-## 5. File Map (what to add/modify)
+## 5. File Map
 
-| File | Change |
-|---|---|
-| `src/tools/search.ts` | **New** — Tavily/SearXNG client |
-| `src/tools/scrape.ts` | **New** — Trafilatura content extraction |
-| `src/tools/classify.ts` | **New** — Butterbase AI gateway for categorization |
-| `src/memory/xtrace-service.ts` | **New** — Memory service with group-aware recall/ingest (wraps existing MemoryService with group support) |
-| `src/agents/orchestrator.ts` | **Modify** — Add search, browse, memory-group logic to message handler |
-| `src/backend/butterbase.ts` | **Modify** — Add typed DB client, auth, AI gateway methods |
-| `pipelines/injest.pipe` | **Modify** — Design the agent pipeline topology |
-| `src/browser/browser-agent.ts` | **Keep** — already does Puppeteer + AX |
-| `src/index.ts` | **Keep** — entry point is correct |
+| File | Status | Change |
+|---|---|---|
+| `src/tools/search.ts` | 📝 Mock | **Phase 1** — Replace with Tavily/SearXNG client |
+| `src/tools/scrape.ts` | 📝 Mock | **Phase 1** — Replace with Trafilatura |
+| `src/tools/classify.ts` | 📝 Mock | **Phase 3** — Replace with Butterbase AI gateway |
+| `src/memory/xtrace-memory.ts` | ✅ Done | Memory service with group support |
+| `src/agents/orchestrator.ts` | ✅ Done | Full flow: pipeline → custom agent → memory → DB → reply |
+| `src/backend/butterbase.ts` | ✅ Done | Typed DB client, auth, AI gateway methods |
+| `pipelines/injest.pipe` | ✅ Done | LLM + XTrace tools + Butterbase MCP (managed in pipeline builder UI) |
+| `src/browser/puppeteer.ts` | ✅ Done | BrowserController with AX bridge |
+| `src/browser/browser-agent.ts` | ✅ Done | High-level browser agent |
+| `src/dom/ax-interface.ts` | ✅ Done | AX dom interface |
+| `src/config/env.ts` | ✅ Done | Environment config |
+| `src/index.ts` | ✅ Done | Entry point with graceful shutdown |
+| `tests/integration.test.ts` | ✅ Done | Full pipeline tests |
 
 ---
 
@@ -226,9 +248,11 @@ Phase 5: Polish & pipeline tuning
 
 | Decision | Choice | Rationale |
 |---|---|---|
+| Pipeline role | **Pre-work** (memory recall + LLM reasoning + DB ops) | Pipeline has XTrace and Butterbase tools built in. Let it handle what it can before the TS layer runs. |
+| LLM provider | **Butterbase AI Gateway** (OpenAI-compatible via `llm_openai_api`) | Meets mandatory requirement. Model: `google/gemini-3.5-flash`. |
 | Search API | Tavily (primary), SearXNG (fallback) | Tavily gives extracted content + results in one call. SearXNG for uncensored results. |
 | Content extraction | Trafilatura (Python, call via `exec`/subprocess) | Best-in-class boilerplate removal. Falls back to Puppeteer text extract for JS pages. |
 | Page interaction | Puppeteer + AX | Already have it. AX discovers actions, Puppeteer executes them. |
 | Memory grouping | XTrace `group_ids` | Native XTrace feature. Each category is a group. |
+| Pipeline config | **Pipeline builder UI only** | Do not edit `.pipe` files directly — UI manages the JSON structure. |
 | Image handling | Base64 encode iMessage attachments → pass to RocketRide LLM context | Vision-capable models can analyze images. |
-| Butterbase AI gateway | Used for classification + summarization (not primary LLM) | Meet mandatory requirement without duplicating RocketRide. |

@@ -46,7 +46,7 @@
             "ui": {
                 "position": {
                     "x": 240,
-                    "y": 210
+                    "y": 200
                 },
                 "nodeType": "default",
                 "formDataValid": true
@@ -68,7 +68,7 @@
             "ui": {
                 "position": {
                     "x": 300,
-                    "y": 380
+                    "y": 360
                 },
                 "nodeType": "default",
                 "formDataValid": true
@@ -85,33 +85,22 @@
             "provider": "tool_xtrace_memory",
             "name": "xTrace Memory",
             "config": {
-                "type": "tool_xtrace_memory",
-                "api_key": "xtk_ky1oY5pGwyvkf_cYcnsy1Z2J9cSSmmBzT16iTLE1SK8",
-                "org_id": "org_HJrhjBBwR7W0",
-                "user_id": "",
+                "api_key": "${ROCKETRIDE_XTRACE_API_KEY}",
+                "org_id": "${ROCKETRIDE_XTRACE_ORG_ID}",
+                "user_id": "demo-user",
+                "agent_id": "assistant",
                 "group_ids": "",
-                "agent_id": "",
-                "app_id": "",
-                "base_url": "https://api.production.xtrace.ai",
-                "show_advanced": false,
-                "extract_artifacts": false,
-                "ingest_timeout": 30,
-                "search_limit": 10,
                 "search_mode": "compose",
-                "wait": false,
-                "xtrace_memory.api_key": "${XTRACE_API_KEY}",
-                "xtrace_memory.org_id": "${XTRACE_ORG_ID}",
-                "xtrace_memory.user_id": "demo-user",
-                "xtrace_memory.group_ids": "",
-                "xtrace_memory.show_advanced": false,
-                "xtrace_memory.agent_id": "assistant",
-                "xtrace_memory.search_mode": "compose",
-                "parameters": {}
+                "show_advanced": false,
+                "type": "tool_xtrace_memory",
+                "parameters": {
+                    "google": {}
+                }
             },
             "ui": {
                 "position": {
                     "x": 500,
-                    "y": 390
+                    "y": 360
                 },
                 "nodeType": "default",
                 "formDataValid": true
@@ -132,9 +121,6 @@
                 "endpoint": "https://api.butterbase.ai/mcp",
                 "serverName": "butterbase",
                 "type": "tool_butterbase",
-                "mcp_client.endpoint": "https://api.butterbase.ai/mcp",
-                "mcp_client.serverName": "butterbase",
-                "mcp_client.bearer": "bb_sk_acb5cebb737f7bcaad26ea6d3f60296e6147991a",
                 "parameters": {
                     "google": {}
                 }
@@ -142,7 +128,7 @@
             "ui": {
                 "position": {
                     "x": 700,
-                    "y": 380
+                    "y": 360
                 },
                 "nodeType": "default",
                 "formDataValid": true
@@ -160,25 +146,21 @@
             "name": "Butterbase AI Gateway",
             "config": {
                 "profile": "custom",
-                "openai_api.profile": "custom",
-                "model": "google/gemini-3.5-flash",
-                "base_url": "https://api.butterbase.ai/v1",
-                "modelTotalTokens": 65536,
-                "llm.cloud.apikey": "bb_sk_acb5cebb737f7bcaad26ea6d3f60296e6147991a",
-                "parameters": {
-                    "google": {}
-                },
                 "custom": {
                     "base_url": "https://api.butterbase.ai/v1",
-                    "apikey": "bb_sk_acb5cebb737f7bcaad26ea6d3f60296e6147991a",
+                    "model": "google/gemini-3.5-flash",
                     "modelTotalTokens": 5000,
-                    "model": "google/gemini-3.5-flash"
+                    "apikey": "bb_sk_acb5cebb737f7bcaad26ea6d3f60296e6147991a"
+                },
+                "name": "Butterbase AI Gateway",
+                "parameters": {
+                    "google": {}
                 }
             },
             "ui": {
                 "position": {
-                    "x": 120,
-                    "y": 380
+                    "x": 100,
+                    "y": 360
                 },
                 "nodeType": "default",
                 "formDataValid": true
@@ -200,7 +182,7 @@
             "ui": {
                 "position": {
                     "x": 460,
-                    "y": 210
+                    "y": 200
                 },
                 "nodeType": "default",
                 "formDataValid": true
@@ -221,5 +203,5 @@
         10,
         10
     ],
-    "docRevision": 29
+    "docRevision": 34
 }
