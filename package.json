@@ -1,0 +1,24 @@
+{
+  "name": "agentic-hub",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Agentic AI hub powered by RocketRide pipelines, Spectrum messaging, XTrace memory, and Butterbase backend",
+  "scripts": {
+    "dev": "bun --watch src/index.ts",
+    "start": "bun run src/index.ts",
+    "typecheck": "tsc --noEmit",
+    "lint": "bunx biome check src/",
+    "format": "bunx biome format --write src/"
+  },
+  "dependencies": {
+    "@butterbase/sdk": "^2.4.0",
+    "@xtraceai/memory": "^0.2.1",
+    "rocketride": "^1.2.0",
+    "spectrum-ts": "^1.18.0"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.3.0",
+    "typescript": "^5.8.0"
+  }
+}
