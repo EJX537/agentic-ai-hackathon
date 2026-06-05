@@ -1,178 +1,129 @@
 {
     "components": [
         {
-            "id": "dropper_1",
-            "provider": "dropper",
-            "name": "Dropper",
+            "id": "chat_1",
+            "provider": "chat",
+            "name": "Chat",
             "config": {
                 "hideForm": true,
                 "mode": "Source",
                 "parameters": {},
-                "type": "dropper",
-                "name": "Dropper"
+                "type": "chat"
             },
             "ui": {
-                "position": {
-                    "x": -150,
-                    "y": 200
-                },
+                "position": { "x": 20, "y": 200 },
                 "nodeType": "default",
                 "formDataValid": true
             }
         },
         {
-            "id": "preprocessor_llm_1",
-            "provider": "preprocessor_llm",
-            "name": "LLM",
+            "id": "agent_rocketride_1",
+            "provider": "agent_rocketride",
+            "name": "RocketRide Wave",
             "config": {
-                "profile": "default",
-                "default": {
-                    "numberOfTokens": 384
-                },
-                "name": "LLM"
+                "instructions": [
+                    "You are a web research assistant. Your job is to produce concise, factual answers to the user's questions.",
+                    "",
+                    "The user's query and any research context (memory recall, search results) are provided in the context block.",
+                    "Use the context to ground your answer. If the context is insufficient, say so clearly.",
+                    "",
+                    "Format your answer as:",
+                    "  1. Direct answer to the question",
+                    "  2. Key findings (bulleted)",
+                    "  3. Any caveats or missing information",
+                    "",
+                    "Keep answers under 400 words unless the user asks for detail."
+                ],
+                "max_waves": 10,
+                "parameters": {}
             },
             "ui": {
-                "position": {
-                    "x": 250,
-                    "y": 190
-                },
+                "position": { "x": 240, "y": 200 },
                 "nodeType": "default",
                 "formDataValid": true
             },
             "input": [
                 {
-                    "lane": "table",
-                    "from": "parse_1"
-                },
-                {
-                    "lane": "text",
-                    "from": "parse_1"
+                    "lane": "questions",
+                    "from": "chat_1"
                 }
             ]
         },
         {
-            "id": "parse_1",
-            "provider": "parse",
-            "name": "Parser",
+            "id": "llm_anthropic_1",
+            "provider": "llm_anthropic",
+            "name": "Anthropic",
             "config": {
-                "name": "Parser"
+                "profile": "claude-sonnet-4-6",
+                "claude-sonnet-4-6": {
+                    "apikey": "${ROCKETRIDE_ANTHROPIC_KEY}"
+                },
+                "name": "Anthropic",
+                "parameters": {}
             },
             "ui": {
-                "position": {
-                    "x": 20,
-                    "y": 170
-                },
+                "position": { "x": 100, "y": 360 },
                 "nodeType": "default",
                 "formDataValid": true
-            },
-            "input": [
-                {
-                    "lane": "tags",
-                    "from": "dropper_1"
-                }
-            ]
-        },
-        {
-            "id": "llm_openai_api_2",
-            "provider": "llm_openai_api",
-            "name": "OpenAI-Compatible API",
-            "config": {
-                "profile": "custom",
-                "custom": {},
-                "name": "OpenAI-Compatible API"
-            },
-            "ui": {
-                "position": {
-                    "x": 250,
-                    "y": 340
-                },
-                "nodeType": "default",
-                "formDataValid": false
             },
             "control": [
                 {
                     "classType": "llm",
-                    "from": "preprocessor_llm_1"
-                }
-            ],
-            "input": [
-                {
-                    "lane": "questions",
-                    "from": "prompt_1"
+                    "from": "agent_rocketride_1"
                 }
             ]
         },
         {
-            "id": "response_documents_1",
-            "provider": "response_documents",
-            "name": "Return Documents",
+            "id": "tool_xtrace_memory_1",
+            "provider": "tool_xtrace_memory",
+            "name": "XTrace Memory",
             "config": {
-                "laneName": "documents",
-                "name": "Return Documents"
+                "api_key": "${ROCKETRIDE_XTRACE_API_KEY}",
+                "org_id": "${ROCKETRIDE_XTRACE_ORG_ID}",
+                "group_ids": "",
+                "show_advanced": false,
+                "type": "tool_xtrace_memory",
+                "user_id": "${ROCKETRIDE_XTRACE_USER_ID}",
+                "agent_id": "assistant",
+                "search_mode": "compose",
+                "parameters": {}
             },
             "ui": {
-                "position": {
-                    "x": 420,
-                    "y": 90
-                },
+                "position": { "x": 500, "y": 360 },
+                "nodeType": "default",
+                "formDataValid": true
+            },
+            "control": [
+                {
+                    "classType": "tool",
+                    "from": "agent_rocketride_1"
+                }
+            ]
+        },
+        {
+            "id": "response_answers_1",
+            "provider": "response_answers",
+            "name": "Return Answers",
+            "config": {
+                "laneName": "answers"
+            },
+            "ui": {
+                "position": { "x": 460, "y": 200 },
                 "nodeType": "default",
                 "formDataValid": true
             },
             "input": [
                 {
-                    "lane": "documents",
-                    "from": "preprocessor_llm_1"
+                    "lane": "answers",
+                    "from": "agent_rocketride_1"
                 }
             ]
-        },
-        {
-            "id": "response_image_1",
-            "provider": "response_image",
-            "name": "Return Image",
-            "config": {
-                "laneName": "image",
-                "name": "Return Image"
-            },
-            "ui": {
-                "position": {
-                    "x": 250,
-                    "y": 100
-                },
-                "nodeType": "default",
-                "formDataValid": true
-            },
-            "input": [
-                {
-                    "lane": "image",
-                    "from": "parse_1"
-                }
-            ]
-        },
-        {
-            "id": "prompt_1",
-            "provider": "prompt",
-            "name": "Prompt",
-            "config": {
-                "instructions": [],
-                "name": "Prompt"
-            },
-            "ui": {
-                "position": {
-                    "x": 20,
-                    "y": 320
-                },
-                "nodeType": "default",
-                "formDataValid": true
-            }
         }
     ],
     "project_id": "hackathon-injest",
     "version": 1,
     "isLocked": false,
     "snapToGrid": true,
-    "snapGridSize": [
-        10,
-        10
-    ],
-    "docRevision": 70
+    "snapGridSize": [10, 10],
+    "docRevision": 1
 }
