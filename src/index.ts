@@ -4,13 +4,13 @@
  * This is a reference implementation showing how to integrate:
  *   - AX           (DOM annotation layer for agent interfaces)
  *   - ax-autobindgen (auto-generated DOM bindings)
- *   - RocketRide  (AI pipeline engine)
+ *   - RocketRide  (AI pipeline engine — CORE execution)
  *   - Spectrum    (unified messaging)
  *   - XTrace      (long-term memory for agents)
  *   - Butterbase  (backend-as-a-service: Postgres, auth, storage, functions)
+ *   - Puppeteer   (browser automation)
  *
  * Usage:
- *   export $(grep -v '^#' .env | xargs)
  *   bun run src/index.ts
  */
 import { AgentOrchestrator } from "./agents/orchestrator.ts";
@@ -39,30 +39,38 @@ function checkEnv() {
 async function main() {
   checkEnv();
 
-  console.log("╔══════════════════════════════════════════════════════╗");
-  console.log("║          Agentic AI Hub — Online                     ║");
-  console.log("╠══════════════════════════════════════════════════════╣");
-  console.log("║  🏗️  AX          — DOM annotation layer              ║");
-  console.log("║  🔗  ax-autobindgen  — Auto DOM bindings             ║");
-  console.log("║  🚀 RocketRide  — AI pipeline engine                 ║");
-  console.log("║  💬 Spectrum    — Unified messaging                  ║");
-  console.log("║  🧠 XTrace      — Long-term memory for agents        ║");
-  console.log("║  🗄️  Butterbase  — Backend-as-a-service              ║");
-  console.log("║  🌐 Puppeteer   — Browser automation                 ║");
-  console.log("╚══════════════════════════════════════════════════════╝");
+  console.log("╔══════════════════════════════════════════════════════════╗");
+  console.log("║           Agentic AI Hub — Online                        ║");
+  console.log("╠══════════════════════════════════════════════════════════╣");
+  console.log("║  🚀 RocketRide  — AI pipeline engine  (CORE)            ║");
+  console.log("║  💬 Spectrum    — Unified messaging                     ║");
+  console.log("║  🧠 XTrace      — Long-term memory for agents           ║");
+  console.log("║  🗄️  Butterbase  — Backend-as-a-service                 ║");
+  console.log("║  🏗️  AX          — DOM annotation layer                 ║");
+  console.log("║  🔗  ax-autobindgen  — Auto DOM bindings                ║");
+  console.log("║  🌐 Puppeteer   — Browser automation                    ║");
+  console.log("╚══════════════════════════════════════════════════════════╝");
   console.log("");
 
-  // Initialise AX DOM interface
+  // Initialise AX DOM interface (for local DOM annotations)
   const dom = new DomInterface();
   dom.init();
   console.log("[Main] AX DOM interface ready — scanned", dom.scan().length, "actions");
 
-  // Initialise Puppeteer browser agent
+  // Initialise Puppeteer browser agent (for remote page automation)
   const browser = new BrowserAgent({ headless: true });
   await browser.start(process.env["BROWSER_START_URL"]);
 
+  // ── RocketRide is the execution core ────────────────────────────────
+  // The pipeline is loaded from a .pipe file or inline config.
+  // Set ROCKETRIDE_PIPELINE_ID in .env to reference a server-side pipeline.
+  const pipelineFile = process.env["ROCKETRIDE_PIPELINE_FILE"];
+  const pipelineOptions = pipelineFile
+    ? { filepath: pipelineFile }
+    : { pipelineId: process.env["ROCKETRIDE_PIPELINE_ID"] ?? "default-agent" };
+
   const orchestrator = new AgentOrchestrator({
-    pipelineId: process.env["ROCKETRIDE_PIPELINE_ID"] ?? "default-agent",
+    pipeline: pipelineOptions,
     defaultUserId: "agentic-hub-user",
     memoryGroupIds: process.env["XTRACE_GROUP_IDS"]?.split(","),
     butterbaseAppId: process.env["BUTTERBASE_APP_ID"],
