@@ -6,14 +6,9 @@
             "name": "RocketRide Wave",
             "config": {
                 "instructions": [
-                    "You are a personal assistant with long-term, shared memory via the xtrace tools.",
+                    "You are a helpful assistant. Answer the user's question based on the provided context.",
                     "",
-                    "At the start of each turn, call xtrace.recall with a query describing what you need to know about the user. Use the returned context to ground your answer.",
-                    "After answering, call xtrace.remember with the relevant turns so you (or other agents sharing this memory) can use them later.",
-                    "",
-                    "For backend tasks (schema, auth, data queries, functions), use butterbase tools. Call butterbase.butterbase_docs with topic \"overview\" first to learn the platform.",
-                    "",
-                    "Use your internal memory only for short-term working notes within this run.",
+                    "Use your internal memory for short-term working notes within this run.",
                     "",
                     "Format your answer as:",
                     "  1. Direct answer to the question",
@@ -57,66 +52,6 @@
             "control": [
                 {
                     "classType": "memory",
-                    "from": "agent_rocketride_1"
-                }
-            ]
-        },
-        {
-            "id": "tool_xtrace_memory_1",
-            "provider": "tool_xtrace_memory",
-            "name": "xTrace Memory",
-            "config": {
-                "api_key": "${ROCKETRIDE_XTRACE_API_KEY}",
-                "org_id": "${ROCKETRIDE_XTRACE_ORG_ID}",
-                "user_id": "demo-user",
-                "agent_id": "assistant",
-                "group_ids": "",
-                "search_mode": "compose",
-                "show_advanced": false,
-                "type": "tool_xtrace_memory",
-                "parameters": {
-                    "google": {}
-                }
-            },
-            "ui": {
-                "position": {
-                    "x": 310,
-                    "y": 300
-                },
-                "nodeType": "default",
-                "formDataValid": true
-            },
-            "control": [
-                {
-                    "classType": "tool",
-                    "from": "agent_rocketride_1"
-                }
-            ]
-        },
-        {
-            "id": "tool_butterbase_1",
-            "provider": "tool_butterbase",
-            "name": "Butterbase MCP Client",
-            "config": {
-                "bearer": "bb_sk_acb5cebb737f7bcaad26ea6d3f60296e6147991a",
-                "endpoint": "https://api.butterbase.ai/mcp",
-                "serverName": "butterbase",
-                "type": "tool_butterbase",
-                "parameters": {
-                    "google": {}
-                }
-            },
-            "ui": {
-                "position": {
-                    "x": 470,
-                    "y": 300
-                },
-                "nodeType": "default",
-                "formDataValid": true
-            },
-            "control": [
-                {
-                    "classType": "tool",
                     "from": "agent_rocketride_1"
                 }
             ]
@@ -197,12 +132,11 @@
         }
     ],
     "project_id": "hackathon-injest",
-    "version": 1,
     "isLocked": false,
     "snapToGrid": true,
     "snapGridSize": [
         10,
         10
     ],
-    "docRevision": 116
+    "docRevision": 122
 }
