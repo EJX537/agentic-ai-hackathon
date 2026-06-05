@@ -15,6 +15,7 @@
  */
 import { AgentOrchestrator } from "./agents/orchestrator.ts";
 import { DomInterface } from "./dom/ax-interface.ts";
+import { BrowserAgent } from "./browser/browser-agent.ts";
 
 // ── Safety: refuse to start without a configured .env ──────────────────
 function checkEnv() {
@@ -47,6 +48,7 @@ async function main() {
   console.log("║  💬 Spectrum    — Unified messaging                  ║");
   console.log("║  🧠 XTrace      — Long-term memory for agents        ║");
   console.log("║  🗄️  Butterbase  — Backend-as-a-service              ║");
+  console.log("║  🌐 Puppeteer   — Browser automation                 ║");
   console.log("╚══════════════════════════════════════════════════════╝");
   console.log("");
 
@@ -54,6 +56,10 @@ async function main() {
   const dom = new DomInterface();
   dom.init();
   console.log("[Main] AX DOM interface ready — scanned", dom.scan().length, "actions");
+
+  // Initialise Puppeteer browser agent
+  const browser = new BrowserAgent({ headless: true });
+  await browser.start(process.env["BROWSER_START_URL"]);
 
   const orchestrator = new AgentOrchestrator({
     pipelineId: process.env["ROCKETRIDE_PIPELINE_ID"] ?? "default-agent",
@@ -66,12 +72,14 @@ async function main() {
   process.on("SIGINT", async () => {
     console.log("\n[Main] Shutting down...");
     dom.shutdown();
+    await browser.shutdown();
     await orchestrator.shutdown();
     process.exit(0);
   });
   process.on("SIGTERM", async () => {
     console.log("\n[Main] Shutting down...");
     dom.shutdown();
+    await browser.shutdown();
     await orchestrator.shutdown();
     process.exit(0);
   });
