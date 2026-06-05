@@ -95,7 +95,14 @@ class MockBackend {
 
 class MockMemory {
   recalledQueries: string[] = [];
-  ingestedMessages: Array<{ messages: Message[] }> = [];
+  ingestedMessages: Array<{ messages: Message[]; groupIds?: string[] }> = [];
+  registeredGroups: string[] = [];
+
+  async registerGroup(body: { name: string; prompt: string }): Promise<{ id: string; name: string }> {
+    steps.push(`xtrace.registerGroup(${body.name})`);
+    this.registeredGroups.push(body.name);
+    return { id: `grp_${body.name}`, name: body.name };
+  }
 
   async recall(query: string, _userId: string, _groupIds?: string[]) {
     steps.push("xtrace.recall");
@@ -105,9 +112,17 @@ class MockMemory {
     };
   }
 
-  async ingestMessages(messages: Message[], _userId: string, _convId: string) {
-    steps.push("xtrace.ingest");
-    this.ingestedMessages.push({ messages });
+  async ingestMessages(
+    messages: Message[],
+    _userId: string,
+    _convId: string,
+    groupIds?: string[],
+  ) {
+    const label = groupIds && groupIds.length > 0
+      ? `xtrace.ingest(group=${groupIds[0]})`
+      : "xtrace.ingest";
+    steps.push(label);
+    this.ingestedMessages.push({ messages, groupIds });
     return messages.length;
   }
 
@@ -203,6 +218,28 @@ class TestOrchestrator {
     this.agent = new MockAgent();
   }
 
+  /** Simulate startup: register groups, auth, connect. */
+  async setup(): Promise<void> {
+    // Register XTrace category groups
+    const categories = [
+      { name: "food", prompt: "Restaurants, recipes, dining" },
+      { name: "travel", prompt: "Destinations, hotels, flights" },
+      { name: "tech", prompt: "Software, AI, dev tools" },
+      { name: "shopping", prompt: "Products, deals, reviews" },
+      { name: "news", prompt: "Current events, headlines" },
+      { name: "other", prompt: "Uncategorised content" },
+    ];
+    for (const def of categories) {
+      await this.memory.registerGroup(def);
+    }
+
+    // Butterbase auth
+    await this.backend.signIn({ email: "test@test.com", password: "testpass" });
+
+    // RocketRide connect
+    await this.rocketride.connect();
+  }
+
   /** Run the full pipeline for a single message. */
   async processMessage(incoming: Message): Promise<string> {
     const userId = incoming.user_id ?? "anonymous";
@@ -240,13 +277,17 @@ class TestOrchestrator {
     ].join("\n");
 
     // ── Step 4: XTrace memory ingest (grouped by category) ─────────
+    // Compute the group ID for the classified category
+    const groupId = `grp_${category}`;
+
     await this.memory.ingestMessages(
       [incoming, { role: "assistant", content: replyText }],
       userId,
       convId,
+      [groupId],
     );
 
-    // Ingest each scraped page as a separate memory
+    // Ingest each scraped page as a separate memory, tagged with the same group
     for (const page of scrapedPages) {
       await this.memory.ingestMessages(
         [
@@ -255,6 +296,7 @@ class TestOrchestrator {
         ],
         userId,
         `${convId}:page:${page.url}`,
+        [groupId],
       );
     }
 
@@ -294,11 +336,8 @@ describe("Integration: iMessage -> Services -> Mock Agent -> iMessage", () => {
 
   it("full pipeline: message in -> reply out (text query)", async () => {
     orch = new TestOrchestrator();
-
-    // Simulate Butterbase auth + RocketRide connect (startup)
-    await orch.backend.signIn({ email: "test@test.com", password: "testpass" });
+    await orch.setup();
     expect(orch.backend.isAuthenticated).toBe(true);
-    await orch.rocketride.connect();
 
     // Process a text query
     const reply = await orch.processMessage({
@@ -320,6 +359,10 @@ describe("Integration: iMessage -> Services -> Mock Agent -> iMessage", () => {
 
     // XTrace: messages were ingested (conversation + page memories)
     expect(orch.memory.ingestedMessages.length).toBeGreaterThanOrEqual(3);
+    // Each ingest call should carry the category group ID
+    for (const im of orch.memory.ingestedMessages) {
+      expect(im.groupIds).toEqual(["grp_food"]);
+    }
 
     // Butterbase: classification worked (food keywords -> "food")
     expect(orch.backend.savedSession).not.toBeNull();
@@ -333,6 +376,12 @@ describe("Integration: iMessage -> Services -> Mock Agent -> iMessage", () => {
     expect(orch.agent.searchResults.length).toBe(2);
 
     // Pipeline steps executed in order
+    // XTrace groups were registered at startup
+    expect(orch.memory.registeredGroups).toContain("food");
+    expect(orch.memory.registeredGroups).toContain("travel");
+    expect(orch.memory.registeredGroups).toContain("tech");
+
+    // Pipeline steps executed in order
     expect(steps).toContain("butterbase.auth");
     expect(steps).toContain("rocketride.connect");
     expect(steps).toContain("=== PIPELINE START ===");
@@ -341,15 +390,14 @@ describe("Integration: iMessage -> Services -> Mock Agent -> iMessage", () => {
     expect(steps).toContain("mockagent.search(Find me good Italian restauran)");
     expect(steps).toContain("mockagent.scrape(2 urls)");
     expect(steps).toContain("butterbase.ai.classify");
-    expect(steps).toContain("xtrace.ingest");
+    expect(steps).toContain("xtrace.ingest(group=grp_food)");
     expect(steps).toContain("butterbase.db.insertSession");
     expect(steps).toContain("=== PIPELINE DONE ===");
   });
 
   it("classifies different query categories correctly", async () => {
     orch = new TestOrchestrator();
-    await orch.backend.signIn({ email: "test@test.com", password: "testpass" });
-    await orch.rocketride.connect();
+    await orch.setup();
 
     // Travel query
     const travelReply = await orch.processMessage({
@@ -374,8 +422,7 @@ describe("Integration: iMessage -> Services -> Mock Agent -> iMessage", () => {
 
   it("handles errors gracefully — throws when search fails", async () => {
     orch = new TestOrchestrator();
-    await orch.backend.signIn({ email: "test@test.com", password: "testpass" });
-    await orch.rocketride.connect();
+    await orch.setup();
 
     // Make search throw
     orch.agent.searchWeb = async () => {
@@ -394,8 +441,7 @@ describe("Integration: iMessage -> Services -> Mock Agent -> iMessage", () => {
 
   it("works with an image reference in the message", async () => {
     orch = new TestOrchestrator();
-    await orch.backend.signIn({ email: "test@test.com", password: "testpass" });
-    await orch.rocketride.connect();
+    await orch.setup();
 
     const reply = await orch.processMessage({
       role: "user",
