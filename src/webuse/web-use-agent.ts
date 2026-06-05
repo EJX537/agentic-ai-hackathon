@@ -78,8 +78,11 @@ export class WebUseAgent {
     let unsubscribe: (() => void) | null = null;
 
     try {
+      console.log(`[WebUseAgent] browse() start — task:${ctx.task.length}c, memory:${ctx.memoryContext?.length ?? 0}c`);
+
       // Find an available model
       const available = await this.modelRegistry.getAvailable();
+      console.log(`[WebUseAgent] Models available: ${available.length}`);
       const model = available[0];
       if (model) {
         console.log(`[WebUseAgent] Using model: ${model.name ?? model.id}`);
@@ -114,17 +117,24 @@ export class WebUseAgent {
 
       console.log(`[WebUseAgent] Prompting agent (${prompt.length} chars)...`);
       // Add a timeout to prevent hanging
-      await Promise.race([
-        session.prompt(prompt),
-        new Promise((_, reject) => setTimeout(() => reject(new Error("session.prompt() timed out after 180s")), 180_000)),
+      const promptPromise = session.prompt(prompt);
+      const promptTimeout = new Promise((_, reject) => setTimeout(() => reject(new Error("session.prompt() timed out after 180s")), 180_000));
+      
+      // Log when prompt promise resolves vs timeout
+      const promptResult = await Promise.race([
+        promptPromise.then(() => ({ source: "prompt" })),
+        promptTimeout.then(() => ({ source: "timeout" })),
       ]);
-      console.log(`[WebUseAgent] prompt() completed`);
-      // Wait for the agent to finish all tool calls
-      await Promise.race([
-        session.agent.waitForIdle(),
-        new Promise((_, reject) => setTimeout(() => reject(new Error("waitForIdle() timed out after 60s")), 60_000)),
+      console.log(`[WebUseAgent] prompt() completed (source: ${promptResult.source})`);
+      // Log when idle promise resolves vs timeout
+      const idlePromise = session.agent.waitForIdle();
+      const idleTimeout = new Promise((_, reject) => setTimeout(() => reject(new Error("waitForIdle() timed out after 60s")), 60_000));
+      
+      const idleResult = await Promise.race([
+        idlePromise.then(() => ({ source: "idle" })),
+        idleTimeout.then(() => ({ source: "timeout" })),
       ]);
-      console.log(`[WebUseAgent] waitForIdle() completed`);
+      console.log(`[WebUseAgent] waitForIdle() completed (source: ${idleResult.source})`);
 
       const duration = Math.round(performance.now() - start);
       console.log(`[WebUseAgent] Done in ${duration}ms (${fullAnswer.length} chars)`);

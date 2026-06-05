@@ -10,7 +10,7 @@
  *     → Butterbase DB (persist session)
  *     → Spectrum reply
  */
-import { RocketRideService, type PipelineOptions, type SendOptions } from "../pipelines/ai-pipeline.ts";
+import { RocketRideService, Question, type PipelineOptions, type SendOptions } from "../pipelines/ai-pipeline.ts";
 import { MessagingService } from "../messaging/spectrum.ts";
 import { MemoryService } from "../memory/xtrace-memory.ts";
 import { BackendService } from "../backend/butterbase.ts";
@@ -140,15 +140,12 @@ export class AgentOrchestrator {
         // ═══════════════════════════════════════════════════════════
         //  STEP B — Run RocketRide pipeline (LLM reasoning + tools)
         // ═══════════════════════════════════════════════════════════
-        const sendOpts: SendOptions = {
-          text: msg.content,
-          context: {
-            memories: recallResult.prompt,
-            userId,
-            conversationId: convId,
-          },
-        };
-        const pipelineResult = await this.rocketride.send(sendOpts);
+        const q = new Question({ expectJson: false });
+        q.addQuestion(msg.content);
+        if (recallResult.prompt) {
+          q.addContext(recallResult.prompt);
+        }
+        const pipelineResult = await this.rocketride.chat(q);
         const pipelineReply = pipelineResult.text;
         console.log(`[Preprocessor] RocketRide done — ${pipelineReply.length} chars`);
 
