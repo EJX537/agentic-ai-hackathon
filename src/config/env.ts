@@ -33,7 +33,8 @@ export const config = {
   butterbase: {
     apiUrl: env("BUTTERBASE_API_URL", "https://api.butterbase.ai"),
     appId: env("BUTTERBASE_APP_ID"),
-    anonKey: env("BUTTERBASE_ANON_KEY", ""),
+    /** Use explicit anon key, or fall back to API key (bb_sk_...). */
+    anonKey: process.env["BUTTERBASE_ANON_KEY"] || process.env["BUTTERBASE_API_KEY"] || "",
     authEmail: env("BUTTERBASE_AUTH_EMAIL", ""),
     authPassword: env("BUTTERBASE_AUTH_PASSWORD", ""),
   },

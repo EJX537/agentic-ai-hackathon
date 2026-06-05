@@ -61,8 +61,8 @@ export class AgentOrchestrator {
 
     // Map categories to group IDs (use first N from env, or auto-generate)
     const groupIds = options.memoryGroupIds ?? [];
-    for (let i = 0; i < CATEGORY_GROUPS.length; i++) {
-      this.categoryGroups.set(CATEGORY_GROUPS[i], groupIds[i] ?? `web-${CATEGORY_GROUPS[i]}`);
+    for (const [i, category] of CATEGORY_GROUPS.entries()) {
+      this.categoryGroups.set(category, groupIds[i] ?? `web-${category}`);
     }
   }
 
@@ -155,7 +155,7 @@ export class AgentOrchestrator {
         // ═══════════════════════════════════════════════════════════════
         //  STEP D — Persist findings as memories, grouped by category
         // ═══════════════════════════════════════════════════════════════
-        const categoryGroupId = this.categoryGroups.get(category) ?? this.categoryGroups.get("other")!;
+        const categoryGroupId = this.categoryGroups.get(category) ?? this.categoryGroups.get("other") ?? "web-other";
 
         // Ingest the conversation into XTrace with the category group
         await this.memory.ingestMessages(
