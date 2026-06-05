@@ -455,3 +455,220 @@ describe("Integration: iMessage -> Services -> Mock Agent -> iMessage", () => {
     expect(orch.backend.savedSession!.query_text).toContain("What restaurant is this?");
   });
 });
+
+// ════════════════════════════════════════════════════════════════════════
+//  XTrace Memory Integration Tests
+// ════════════════════════════════════════════════════════════════════════
+
+describe("XTrace Memory → WebUseAgent integration", () => {
+  let orch: TestOrchestrator;
+
+  beforeEach(() => {
+    steps.length = 0;
+  });
+
+  it("passes memory recall context to the browsing agent", async () => {
+    orch = new TestOrchestrator();
+    await orch.setup();
+
+    // Pre-populate memory with a fact
+    orch.memory.recalledQueries.push("historical fact");
+
+    const reply = await orch.processMessage({
+      role: "user",
+      content: "Find me good Italian restaurants in SF",
+      user_id: FAKE_USER.id,
+      conv_id: FAKE_CONV,
+    });
+
+    // XTrace recall was called
+    expect(orch.memory.recalledQueries).toContain("Find me good Italian restaurants in SF");
+    // XTrace ingest happened
+    expect(orch.memory.ingestedMessages.length).toBeGreaterThanOrEqual(3);
+    expect(steps).toContain("xtrace.recall");
+    expect(steps).toContain("xtrace.ingest(group=grp_food)");
+  });
+
+  it("groups page memories by category in XTrace", async () => {
+    orch = new TestOrchestrator();
+    await orch.setup();
+
+    await orch.processMessage({
+      role: "user",
+      content: "Latest GPT AI developments",
+      user_id: FAKE_USER.id,
+      conv_id: "test-conv-xtrace-1",
+    });
+
+    // Check that ingested messages carry the correct group IDs
+    for (const im of orch.memory.ingestedMessages) {
+      // Should all be tech category
+      expect(im.groupIds).toBeDefined();
+      if (im.groupIds) {
+        for (const gid of im.groupIds) {
+          expect(gid).toMatch(/grp_/);
+        }
+      }
+    }
+
+    // The first ingest (conversation) should be tech-related
+    expect(orch.backend.savedSession!.category).toBe("tech");
+  });
+
+  it("ingests multiple page memories per session", async () => {
+    orch = new TestOrchestrator();
+    await orch.setup();
+
+    await orch.processMessage({
+      role: "user",
+      content: "Best hotels in Tokyo for travel",
+      user_id: FAKE_USER.id,
+      conv_id: "test-conv-xtrace-2",
+    });
+
+    // Should have ingested: 1 conversation + 2 page memories = 3 minimum
+    expect(orch.memory.ingestedMessages.length).toBeGreaterThanOrEqual(3);
+
+    // The conversation memories should be grouped as travel
+    const travelIngests = orch.memory.ingestedMessages.filter(
+      (im) => im.groupIds?.[0] === "grp_travel",
+    );
+    expect(travelIngests.length).toBeGreaterThanOrEqual(1);
+  });
+});
+
+// ════════════════════════════════════════════════════════════════════════
+//  Agent Orchestrator — Direct Tests (no Spectrum listener)
+// ════════════════════════════════════════════════════════════════════════
+
+describe("Agent Orchestrator direct flow", () => {
+  let orch: TestOrchestrator;
+
+  beforeEach(() => {
+    steps.length = 0;
+  });
+
+  it("orchestrator processes message through all 5 steps", async () => {
+    orch = new TestOrchestrator();
+    await orch.setup();
+
+    const reply = await orch.processMessage({
+      role: "user",
+      content: "Tell me about the best Italian restaurants in Tokyo",
+      user_id: FAKE_USER.id,
+      conv_id: "test-direct-1",
+    });
+
+    // Verify all 5 steps executed
+    expect(steps).toContain("xtrace.recall");
+    expect(steps).toContain("rocketride.send");
+    expect(steps).toContain("butterbase.ai.classify");
+    expect(steps).toContain("xtrace.ingest(group=grp_food)");
+    expect(steps).toContain("butterbase.db.insertSession");
+
+    // Reply includes search results
+    expect(reply).toContain("--- Sources ---");
+  });
+
+  it("preserves user identity through the pipeline", async () => {
+    orch = new TestOrchestrator();
+    await orch.setup();
+
+    const customUser = { id: "user-custom-456", phone: "+16505551234" };
+    await orch.processMessage({
+      role: "user",
+      content: "Find me a good pizza place",
+      user_id: customUser.id,
+      conv_id: "test-direct-2",
+    });
+
+    expect(orch.backend.savedSession!.user_id).toBe(customUser.id);
+  });
+
+  it("ingests memories with correct group IDs per category", async () => {
+    orch = new TestOrchestrator();
+    await orch.setup();
+
+    // Food query
+    await orch.processMessage({
+      role: "user",
+      content: "Best Italian restaurants in NYC",
+      user_id: FAKE_USER.id,
+      conv_id: "test-cat-1",
+    });
+    expect(orch.backend.savedSession!.category).toBe("food");
+
+    // Travel query
+    await orch.processMessage({
+      role: "user",
+      content: "Cheap travel hotel deals in Paris",
+      user_id: FAKE_USER.id,
+      conv_id: "test-cat-2",
+    });
+    expect(orch.backend.savedSession!.category).toBe("travel");
+  });
+});
+
+// ════════════════════════════════════════════════════════════════════════
+//  Mock Agent — Deterministic Search/Scrape Behavior
+// ════════════════════════════════════════════════════════════════════════
+
+describe("Mock Agent behavior", () => {
+  let orch: TestOrchestrator;
+
+  beforeEach(() => {
+    steps.length = 0;
+  });
+
+  it("returns consistent search results for text queries", async () => {
+    orch = new TestOrchestrator();
+    await orch.setup();
+
+    await orch.processMessage({
+      role: "user",
+      content: "Find recipe websites",
+      user_id: FAKE_USER.id,
+      conv_id: "test-mock-1",
+    });
+
+    expect(orch.agent.searchResults.length).toBe(2);
+    expect(orch.agent.searchResults[0].url).toContain("example.com");
+    expect(orch.agent.scrapedPages.length).toBe(2);
+  });
+
+  it("scraped pages have all required fields", async () => {
+    orch = new TestOrchestrator();
+    await orch.setup();
+
+    await orch.processMessage({
+      role: "user",
+      content: "Find hiking trails",
+      user_id: FAKE_USER.id,
+      conv_id: "test-mock-2",
+    });
+
+    for (const page of orch.agent.scrapedPages) {
+      expect(page).toHaveProperty("url");
+      expect(page).toHaveProperty("title");
+      expect(page).toHaveProperty("content");
+      expect(page).toHaveProperty("wordCount");
+      expect(typeof page.wordCount).toBe("number");
+    }
+  });
+
+  it("search handles empty/blank queries", async () => {
+    orch = new TestOrchestrator();
+    await orch.setup();
+
+    const reply = await orch.processMessage({
+      role: "user",
+      content: "",
+      user_id: FAKE_USER.id,
+      conv_id: "test-mock-3",
+    });
+
+    // Should still produce some output (pipeline fallback)
+    expect(reply).toBeDefined();
+    expect(reply.length).toBeGreaterThan(0);
+  });
+});

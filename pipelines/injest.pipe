@@ -1,25 +1,6 @@
 {
     "components": [
         {
-            "id": "chat_1",
-            "provider": "chat",
-            "name": "Chat",
-            "config": {
-                "hideForm": true,
-                "mode": "Source",
-                "parameters": {},
-                "type": "chat"
-            },
-            "ui": {
-                "position": {
-                    "x": 20,
-                    "y": 200
-                },
-                "nodeType": "default",
-                "formDataValid": true
-            }
-        },
-        {
             "id": "agent_rocketride_1",
             "provider": "agent_rocketride",
             "name": "RocketRide Wave",
@@ -45,8 +26,8 @@
             },
             "ui": {
                 "position": {
-                    "x": 240,
-                    "y": 200
+                    "x": 230,
+                    "y": 140
                 },
                 "nodeType": "default",
                 "formDataValid": true
@@ -67,8 +48,8 @@
             },
             "ui": {
                 "position": {
-                    "x": 300,
-                    "y": 360
+                    "x": 150,
+                    "y": 300
                 },
                 "nodeType": "default",
                 "formDataValid": true
@@ -99,8 +80,8 @@
             },
             "ui": {
                 "position": {
-                    "x": 500,
-                    "y": 360
+                    "x": 310,
+                    "y": 300
                 },
                 "nodeType": "default",
                 "formDataValid": true
@@ -127,8 +108,8 @@
             },
             "ui": {
                 "position": {
-                    "x": 700,
-                    "y": 360
+                    "x": 470,
+                    "y": 300
                 },
                 "nodeType": "default",
                 "formDataValid": true
@@ -159,8 +140,8 @@
             },
             "ui": {
                 "position": {
-                    "x": 100,
-                    "y": 360
+                    "x": -10,
+                    "y": 300
                 },
                 "nodeType": "default",
                 "formDataValid": true
@@ -181,8 +162,8 @@
             },
             "ui": {
                 "position": {
-                    "x": 460,
-                    "y": 200
+                    "x": 430,
+                    "y": 170
                 },
                 "nodeType": "default",
                 "formDataValid": true
@@ -193,6 +174,26 @@
                     "from": "agent_rocketride_1"
                 }
             ]
+        },
+        {
+            "id": "chat_1",
+            "provider": "chat",
+            "name": "Chat",
+            "config": {
+                "hideForm": true,
+                "mode": "Source",
+                "parameters": {},
+                "type": "chat",
+                "name": "Chat"
+            },
+            "ui": {
+                "position": {
+                    "x": 30,
+                    "y": 170
+                },
+                "nodeType": "default",
+                "formDataValid": true
+            }
         }
     ],
     "project_id": "hackathon-injest",
@@ -203,5 +204,5 @@
         10,
         10
     ],
-    "docRevision": 34
+    "docRevision": 114
 }

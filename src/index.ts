@@ -72,8 +72,7 @@ async function main() {
   const orchestrator = new AgentOrchestrator({
     pipeline: pipelineOptions,
     defaultUserId: "agentic-hub-user",
-    memoryGroupIds: process.env["XTRACE_GROUP_IDS"]?.split(","),
-    butterbaseAppId: process.env["BUTTERBASE_APP_ID"],
+    browser,
   });
 
   // Graceful shutdown on SIGINT/SIGTERM

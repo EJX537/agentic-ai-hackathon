@@ -155,8 +155,14 @@ export class BrowserController {
   async injectAx(axBundle: string, autobindgenBundle: string): Promise<void> {
     if (!this.page) throw new Error("Browser not launched.");
 
-    await this.page.evaluate(axBundle);
-    await this.page.evaluate(autobindgenBundle);
+    // Strip ESM export lines — these bundles have `export { ... }` / `export default ...`
+    // at the end for Node module consumers but break in a browser context.
+    const cleanAx = axBundle.replace(/^export\s+\{.+\};?$/m, "");
+    const cleanAbg = autobindgenBundle.replace(/^export\s+default\s+.+;?$/m, "");
+
+    // Use addScriptTag so the code runs as a proper <script> element.
+    await this.page.addScriptTag({ content: cleanAx });
+    await this.page.addScriptTag({ content: cleanAbg });
 
     // Configure and bind
     await this.page.evaluate(() => {
